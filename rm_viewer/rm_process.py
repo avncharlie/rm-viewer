@@ -12,7 +12,7 @@ import fitz
 import xxhash
 from remarks import run_remarks
 from rmc.exporters.svg import set_device, set_dimensions_for_pdf
-from rmc.exporters.pdf import rm_to_pdf
+from rmc.exporters.pdf import rm_to_svg, chrome_svg_to_pdf
 
 from .utils import validate_path, validate_output_path, get_gcv_api_key
 from .ocr import run_ocr_on_rm_output, add_text_layer_to_page
@@ -149,6 +149,33 @@ def get_page_redir_map(content: dict) -> dict[str, int | None]:
     return redir_map
 
 
+def rm_to_pdf_no_text(rm_path, pdf_path):
+    '''
+    Convert .rm file to PDF, and hide text.
+    '''
+    with tempfile.NamedTemporaryFile(suffix=".svg", mode="w", delete=False) as f_temp:
+        rm_to_svg(rm_path, f_temp.name)
+        temp_svg_path = f_temp.name
+
+    # hack to hide text
+    new = ''
+    with open(temp_svg_path, 'r') as f:
+        lines = f.readlines()
+        for i, line in enumerate(lines):
+            new += line
+            if i >= len(lines) - 2:
+                continue
+            if line.strip().startswith('text {') and \
+                    lines[i+1].strip().startswith('font-family'): #}
+                new += 'display: none;\n'
+    with open(temp_svg_path, 'w') as f:
+        f.write(new)
+
+    try:
+        chrome_svg_to_pdf(temp_svg_path, pdf_path)
+    finally:
+        Path(temp_svg_path).unlink(missing_ok=True)
+
 def build_rm_file_index(
     rm_file_dir: Path,
     rm_output_dir: Path,
@@ -204,7 +231,7 @@ def build_rm_file_index(
         # Convert .rm to PDF
         fname = page_id
         rm_output_pdf = rm_output_dir / f'{fname}.pdf'
-        rm_to_pdf(str(f), str(rm_output_pdf))
+        rm_to_pdf_no_text(str(f), str(rm_output_pdf))
 
         rm_hash = hashlib.md5(f.read_bytes()).hexdigest()
 
