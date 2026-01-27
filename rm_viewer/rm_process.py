@@ -258,7 +258,7 @@ def build_rm_file_index(
                 # Run fresh OCR
                 ocr_json_path = rm_output_dir / f'{fname}.ocr.json'
                 ocr_result = run_ocr_on_rm_output(
-                    rm_output_pdf, ocr_json_path, api_key, rm_hash
+                    rm_output_pdf, ocr_json_path, api_key, rm_hash, dpi=600
                 )
                 if ocr_result:
                     ocr_path = str(ocr_json_path.relative_to(base_output_dir))
@@ -378,6 +378,8 @@ def parse_item(
                 if pages and last in pages:
                     last_opened_page = pages.index(last) + 1
 
+
+    # if name != 'Colours': return {}, 'skipped'
 
     # Skip empty items
     if not content and not metadata:
