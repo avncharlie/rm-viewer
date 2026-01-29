@@ -729,44 +729,6 @@ def try_get_name(files: list[Path]):
                 name = metadata.get('visibleName', '')
                 return name
 
-
-def build_folder_path(item_id: str, items_by_id: dict) -> Path:
-    """Build the folder path for an item by following parent chain."""
-    path_parts = []
-    current_id = items_by_id[item_id].get('parent', '')
-
-    while current_id and current_id in items_by_id:
-        parent = items_by_id[current_id]
-        path_parts.insert(0, parent['name'])
-        current_id = parent.get('parent', '')
-
-    return Path(*path_parts) if path_parts else Path('.')
-
-
-def generate_files_zip(output_dir: Path, metadata: list[dict]):
-    """Generate files.zip containing all PDFs in their folder hierarchy."""
-    items_by_id = {item['id']: item for item in metadata}
-    zip_path = output_dir / 'files.zip'
-
-    with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zf:
-        for item in metadata:
-            if item.get('type') != 'book':
-                continue
-
-            output_pdf = item.get('output_pdf')
-            if not output_pdf:
-                continue
-
-            pdf_path = output_dir / output_pdf
-            if not pdf_path.exists():
-                continue
-
-            # Build hierarchy path
-            folder_path = build_folder_path(item['id'], items_by_id)
-            archive_name = Path('files') / folder_path / f"{item['name']}.pdf"
-
-            zf.write(pdf_path, archive_name)
-
 def rm_process(args: argparse.Namespace):
     xochitl_dir = Path(args.xochitl_dir)
     output_dir = Path(args.output_dir)
@@ -844,10 +806,6 @@ def rm_process(args: argparse.Namespace):
     with open(metadata_path, 'w') as f:
         json.dump(full_metadata, f, indent=2)
 
-    # Generate files.zip with PDFs in folder hierarchy
-    log.info("Generating files.zip...")
-    generate_files_zip(output_dir, full_metadata)
-
     if errors:
         errors_path = output_dir / 'errors.json'
         with open(errors_path, 'w') as f:
@@ -867,7 +825,5 @@ def rm_process(args: argparse.Namespace):
         print(f"  {total_thumbnails} thumbnails generated")
     if total_ocr_scans or total_words:
         print(f"  {total_ocr_scans} OCR scans completed ({total_words} words recognised)")
-    print(f"  files.zip generated")
     if errors:
         print(f"  {len(errors)} errors")
-
