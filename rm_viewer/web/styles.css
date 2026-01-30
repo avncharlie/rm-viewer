@@ -45,11 +45,11 @@ html, body {
 .rm_grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-  gap: 13px;
+  gap: 15px;
 }
 
-#document_grid {
-  margin-top: 20px;
+#folder_grid {
+  margin-bottom: 30px;
 }
 
 .folder {
@@ -96,7 +96,57 @@ html, body {
 }
 
 .document {
-  background-color: wheat;
-  border: 1px solid black;
-  height: 100px;
+}
+
+.doc_text1 {
+  margin-top: 7px;
+  font-size: 1rem;
+  font-weight: 450;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.doc_text2 {
+  margin-top: 2px;
+  font-size: 0.85rem;
+  font-weight: 300;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.thumbnail img {
+  display: block;
+  border: 1px solid var(--bgDark);
+  transition: box-shadow 0.25s ease, transform 0.25s ease;
+}
+
+.document:hover .thumbnail img {
+  box-shadow: 0 0 13px rgba(0, 0, 0, 0.15);
+}
+
+/* Notebook thumbnails - rounded corners on bottom and top right and
+ * binder bar on left. */
+.notebook_thumbnail {
+  position: relative;
+}
+.notebook_thumbnail::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 7px;
+  height: 100%;
+  background-color: var(--bgDark);
+  border-radius: 2px 0 0 2px;
+}
+.notebook_thumbnail img {
+  border-radius: 0 10px 10px 0;
+}
+
+/* Pdf thumbnails - have no special styling */
+/* ebook thumbnails - rounded corners on bottom and top right */
+.ebook_thumbnail img {
+  border-radius: 0 10px 10px 0;
 }

@@ -21,13 +21,37 @@ function renderFolders(folders) {
   });
 }
 
+function renderDocuments(documents) {
+  const grid = document.getElementById('document_grid');
+  grid.innerHTML = '';
+  
+  documents.forEach(doc => {
+    const div = document.createElement('div');
+    div.className = 'document';
+    div.innerHTML = `
+      <div class='thumbnail ${doc.type}_thumbnail'>
+        <img src="${doc.thumbnail}" width="100%"> 
+      </div>
+      <div class='doc_text1'>${doc.text1}</div>
+      <div class='doc_text2'>${doc.text2}</div>
+    `;
+    grid.appendChild(div);
+  });
+}
+
 // Usage:
 renderFolders([
   { name: 'Articles', empty: false },
   { name: 'Books', empty: false },
   { name: 'Comics', empty: false },
-  { name: 'Development methadologies', empty: false },
-  // { name: 'Develot ', empty: false },
+  { name: 'Development', empty: false },
   { name: 'Papers', empty: false },
   { name: 'Recipes', empty: true },
+]);
+
+// Usage:
+renderDocuments([
+  { type: 'notebook', thumbnail: '/rmviewer.png', text1: 'RMViewer', text2: 'Page 1 of 2' },
+  { type: 'pdf', thumbnail: '/getting_started.png', text1: 'Getting started', text2: 'Page 5 of 9' },
+  { type: 'ebook', thumbnail: '/everybody_always.png', text1: 'Everybody, always', text2: '8% read' },
 ]);
