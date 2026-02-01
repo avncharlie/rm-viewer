@@ -24,6 +24,8 @@
   --bgDark: rgb(236,230,218);
   --bgLight: rgb(249,246,241);
   --dark: rgb(55,50,47);
+  --grid-min-width: 200px;
+  --grid-min-width-mobile: 170px;
 }
 
 html, body {
@@ -48,13 +50,13 @@ html, body {
 
 .rm_grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(var(--grid-min-width), 1fr));
   gap: 15px;
 }
 
 @media (max-width: 600px) {
   .rm_grid {
-    grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(var(--grid-min-width-mobile), 1fr));
   }
 }
 

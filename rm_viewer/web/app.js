@@ -166,6 +166,13 @@ sortOptions.forEach(option => {
   });
 });
 
+const gridSizes = {
+  large: { desktop: '280px', mobile: '200px' },
+  medium: { desktop: '200px', mobile: '170px' },
+  small: { desktop: '150px', mobile: '100px' },
+  list: { desktop: '100%', mobile: '100%' }
+};
+
 // Grid option click
 gridOptions.forEach(option => {
   option.addEventListener('click', (e) => {
@@ -176,7 +183,11 @@ gridOptions.forEach(option => {
     const gridType = option.dataset.grid;
     gridLabel.textContent = gridLabels[gridType];
     
-    // Trigger your grid change logic here
+    // Apply grid sizes
+    const sizes = gridSizes[gridType];
+    document.documentElement.style.setProperty('--grid-min-width', sizes.desktop);
+    document.documentElement.style.setProperty('--grid-min-width-mobile', sizes.mobile);
+    
     console.log('Grid:', gridType);
   });
 });
