@@ -223,16 +223,20 @@ html, body {
   opacity: 0;
 }
 
-.document:hover .doc_text2_default {
-  opacity: 0;
+/* Right align hover text in list view */
+.list_view .doc_text2_hover {
+  left: auto;
+  right: 0;
 }
 
-.document:hover .doc_text2_hover {
-  opacity: 1;
-}
+@media (hover: hover) {
+  .document:hover .doc_text2_default {
+    opacity: 0;
+  }
 
-.document:hover .doc_text2_hover {
-  display: inline;
+  .document:hover .doc_text2_hover {
+    opacity: 1;
+  }
 }
 
 .thumbnail img {
@@ -259,6 +263,10 @@ html, body {
   height: 100%;
   background-color: var(--bgDark);
   border-radius: 2px 0 0 2px;
+}
+
+.rm_grid.list_view .notebook_thumbnail::before {
+  width: 3px;
 }
 
 .notebook_thumbnail img {
