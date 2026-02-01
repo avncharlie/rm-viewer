@@ -208,6 +208,31 @@ html, body {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  position: relative;
+}
+
+/* Ebook hover text toggle */
+.doc_text2_default,
+.doc_text2_hover {
+  transition: opacity 0.1s ease;
+}
+
+.doc_text2_hover {
+  position: absolute;
+  left: 0;
+  opacity: 0;
+}
+
+.document:hover .doc_text2_default {
+  opacity: 0;
+}
+
+.document:hover .doc_text2_hover {
+  opacity: 1;
+}
+
+.document:hover .doc_text2_hover {
+  display: inline;
 }
 
 .thumbnail img {
