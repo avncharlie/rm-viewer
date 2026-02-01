@@ -567,6 +567,9 @@ def parse_item(
             'parent': parent
         }, status, {}
 
+    nb_output_dir = output_dir / f'{name} - {id}'
+    cached_dir_exists = nb_output_dir.exists()
+
     # For books: compute source hash and check against old
     source_hash = compute_source_hash(id, files)
 
@@ -583,7 +586,7 @@ def parse_item(
                 old_dir.rename(new_dir)
 
         # If hash unchanged, return old metadata (with updated name/parent)
-        if source_hash == old_hash:
+        if source_hash == old_hash and cached_dir_exists:
             log.info(f'Unchanged: {name}')
             result = old_item.copy()
             result['name'] = name
@@ -592,8 +595,6 @@ def parse_item(
 
     # Hash changed or new item - do full processing
     log.info(f'Processing item: {name}')
-
-    nb_output_dir = output_dir / f'{name} - {id}'
 
     # Get old rm_files for OCR caching (before we modify anything)
     old_rm_files = old_item.get('rm_files', []) if old_item else []
@@ -695,7 +696,7 @@ def parse_item(
 
     xochitl_dir_hash = xx_dir_hash(nb_xochitl_dir)
 
-    status = 'modified' if old_item else 'created'
+    status = 'modified' if old_item and cached_dir_exists else 'created'
     stats = {
         'thumbnails_generated': new_thumbnails,
         'ocr_scans': new_ocr_scans,

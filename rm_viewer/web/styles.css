@@ -27,7 +27,7 @@
 }
 
 html, body {
-  height: 100%;
+  min-height: 100%;
   margin: 0;
   font-family: "reMarkable Sans", sans-serif;
   background-color: var(--bgLight);
@@ -39,17 +39,27 @@ html, body {
 
 .app {
   height: 100%;
-  padding: 10px;
+  padding: 20px;
 }
 
 .rm_grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
   gap: 15px;
+}
+
+@media (max-width: 600px) {
+  .rm_grid {
+    grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  }
 }
 
 #folder_grid {
   margin-bottom: 30px;
+}
+
+#folder_grid:empty {
+  margin-bottom: 0;
 }
 
 .folder {
@@ -145,8 +155,110 @@ html, body {
   border-radius: 0 10px 10px 0;
 }
 
-/* Pdf thumbnails - have no special styling */
+/* PDF thumbnails have no special styling */
 /* ebook thumbnails - rounded corners on bottom and top right */
 .ebook_thumbnail img {
   border-radius: 0 10px 10px 0;
+}
+
+#breadcrumbs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 1.1rem;
+  white-space: nowrap;
+  overflow-x: auto;
+  margin-bottom: 20px;
+}
+
+/* Custom scrollbar */
+/* Firefox */
+#breadcrumbs {
+  scrollbar-width: thin;
+  scrollbar-color: var(--bgMoreDark) var(--bgLight);
+}
+/* Chrome, Safari, Edge */
+#breadcrumbs::-webkit-scrollbar {
+  height: 6px;
+}
+#breadcrumbs::-webkit-scrollbar-track {
+  background: var(--bgLight);
+  border-radius: 3px;
+}
+#breadcrumbs::-webkit-scrollbar-thumb {
+  background: var(--bgMoreDark);
+  border-radius: 3px;
+}
+#breadcrumbs::-webkit-scrollbar-thumb:hover {
+  background: var(--bgDark);
+}
+
+.breadcrumb_item {
+  font-size: 1.3rem;
+  color: var(--dark);
+  text-decoration: none;
+  cursor: pointer;
+  padding: 8px;
+  border-radius: 3px;
+  font-weight: 300;
+}
+.breadcrumb_item:hover {
+  background-color: var(--bgDark); 
+}
+
+.breadcrumb_current {
+  cursor: default;
+}
+.breadcrumb_current:hover {
+  background-color: inherit;
+}
+
+.breadcrumb_root {
+  font-family: "reMarkable Serif", serif;
+  font-weight: 350;
+  font-size: 1.8rem;
+}
+
+#breadcrumbs svg {
+  width: 16px;
+  height: 16px;
+  fill: var(--dark);
+  flex-shrink: 0;
+}
+
+#search_bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background-color: var(--bgDark);
+  padding: 8px 14px;
+  margin-bottom: 15px;
+  transition: background-color 0.15s;
+}
+
+#search_bar:focus-within {
+  background-color: var(--bgMoreDark);
+}
+
+#search_bar svg {
+  width: 20px;
+  height: 20px;
+  fill: var(--dark);
+  flex-shrink: 0;
+  opacity: 0.7;
+}
+
+#search_input {
+  flex: 1;
+  border: none;
+  background: transparent;
+  font: inherit;
+  font-size: 1rem;
+  color: var(--dark);
+  outline: none;
+}
+
+#search_input::placeholder {
+  color: var(--dark);
+  opacity: 0.5;
 }

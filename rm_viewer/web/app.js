@@ -55,3 +55,55 @@ renderDocuments([
   { type: 'pdf', thumbnail: '/getting_started.png', text1: 'Getting started', text2: 'Page 5 of 9' },
   { type: 'ebook', thumbnail: '/everybody_always.png', text1: 'Everybody, always', text2: '8% read' },
 ]);
+
+/////////////////////////////////////////////////////////////
+
+const BREADCRUMB_ARROW = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="currentColor">
+  <path d="M15.8787 8.99998L18 6.87866L35.1213 24L18 41.1213L15.8787 39L27.6967 27.182C29.4541 25.4246 29.4541 22.5754 27.6967 20.818L15.8787 8.99998Z"></path>
+</svg>`;
+
+function renderBreadcrumbs(path) {
+  const container = document.getElementById('breadcrumbs');
+  container.innerHTML = '';
+
+  path.forEach((item, index) => {
+    const isFirst = index === 0;
+    const isLast = index === path.length - 1;
+
+    // Add arrow before all items except first
+    if (!isFirst) {
+      container.insertAdjacentHTML('beforeend', BREADCRUMB_ARROW);
+    }
+
+    const span = document.createElement('span');
+    span.className = 'breadcrumb_item';
+    span.textContent = item.name;
+
+    if (isFirst) {
+      span.classList.add('breadcrumb_root');
+    } else if (isLast) {
+      span.classList.add('breadcrumb_current');
+    } else {
+      span.classList.add('breadcrumb_folder');
+    }
+
+    if (!isLast) {
+      span.addEventListener('click', () => navigateTo(item.id));
+    }
+
+    container.appendChild(span);
+  });
+}
+
+function navigateTo(id) {
+  console.log('Navigate to:', id);
+  // Implement your navigation logic here
+}
+
+// Usage:
+renderBreadcrumbs([
+  { id: 'root', name: 'My files' },
+  { id: 'books', name: 'Books' },
+  { id: 'theology', name: 'Systematic Theology' },
+  { id: 'theology', name: 'Systematic Theology' },
+]);
