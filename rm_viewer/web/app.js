@@ -131,6 +131,7 @@ sortButton.addEventListener('click', (e) => {
   sortDropdown.classList.toggle('hidden');
 });
 
+
 // Close dropdown when clicking header
 sortHeader.addEventListener('click', () => {
   sortDropdown.classList.add('hidden');

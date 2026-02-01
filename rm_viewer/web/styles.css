@@ -34,7 +34,12 @@ html, body {
   color: var(--dark);
 }
 
-* { box-sizing: border-box; }
+
+* {
+  /* disable double tap to zoom */
+  touch-action: manipulation;
+  box-sizing: border-box; 
+}
 
 .app {
   height: 100%;
@@ -303,24 +308,32 @@ html, body {
   font-size: 0.95rem;
   color: var(--dark);
   cursor: pointer;
-  transition: background-color 0.15s;
   white-space: nowrap;
   flex-shrink: 0;
+  -webkit-tap-highlight-color: transparent;
 }
 
-#sort_button:hover {
+/* Background when dropdown is open */
+#sort_widget.open #sort_button {
   background-color: var(--bgDark);
 }
 
+/* Hover only on devices that support it */
+@media (hover: hover) {
+  #sort_button:hover {
+    background-color: var(--bgDark);
+  }
+}
+
 #sort_button .sort_chevron {
-  width: 18px;
-  height: 18px;
+  width: 15px;
+  height: 15px;
   fill: var(--dark);
-  transition: transform 0.2s;
+  transform: rotate(90deg); /* Points down */
 }
 
 #sort_widget.open #sort_button .sort_chevron {
-  transform: rotate(180deg);
+  transform: rotate(-90deg);
 }
 
 /* Dropdown */
