@@ -226,11 +226,6 @@ documentsData = [
   },
 ];
 
-// Initial render
-refreshView();
-
-/////////////////////////////////////////////////////////////
-
 const BREADCRUMB_ARROW = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="currentColor">
   <path d="M15.8787 8.99998L18 6.87866L35.1213 24L18 41.1213L15.8787 39L27.6967 27.182C29.4541 25.4246 29.4541 22.5754 27.6967 20.818L15.8787 8.99998Z"></path>
 </svg>`;
@@ -397,3 +392,8 @@ searchInput.addEventListener('blur', () => {
     toolbar.classList.remove('search_focused');
   }, 150);
 });
+
+
+// Initial render
+// refreshView();
+

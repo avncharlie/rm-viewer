@@ -193,6 +193,23 @@
     <div id='folder_grid' class="rm_grid"></div>
     <div id='document_grid' class="rm_grid"></div>
 
+    <div id="pdf-viewer" style="height: 100vh"></div>
+    <script type="module">
+      import EmbedPDF from 'https://cdn.jsdelivr.net/npm/@embedpdf/snippet@2/dist/embedpdf.js';
+     
+      EmbedPDF.init({
+        type: 'container',
+        target: document.getElementById('pdf-viewer'),
+        src: '/RMViewer.pdf',
+        theme: { preference: 'light' },
+        scroll: {
+          defaultStrategy: 'horizontal',
+          defaultPageGap: 20
+        },
+        disabledCategories: ['annotation', 'print', 'redaction']
+      });
+    </script>
+
   </main>
   <script src="/app.js"></script>
   <img  

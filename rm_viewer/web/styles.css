@@ -600,3 +600,56 @@ html, body {
 .grid_option.selected svg {
   fill: white;
 }
+
+/* css for pdf viewer */
+#pdf_container {
+  flex: 1;
+  overflow: auto;
+  display: flex;
+  justify-content: center;
+  padding: 20px;
+  background: var(--bgLight);
+}
+
+.page_wrapper {
+  box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+}
+
+/* Critical: text layer styling */
+.text_layer {
+  overflow: hidden;
+  opacity: 0.2;
+  line-height: 1.0;
+}
+
+.text_layer > span {
+  color: transparent;
+  position: absolute;
+  white-space: pre;
+  pointer-events: all;
+}
+
+.text_layer ::selection {
+  background: rgba(0, 0, 255, 0.3);
+}
+
+/* Search highlight */
+.search_highlight {
+  background-color: rgba(255, 230, 0, 0.5);
+  color: transparent;
+  border-radius: 2px;
+}
+
+.search_box {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.search_box input {
+  padding: 6px 10px;
+  border: 1px solid var(--bgMoreDark);
+  border-radius: 4px;
+  font: inherit;
+  background: var(--bgLight);
+}
