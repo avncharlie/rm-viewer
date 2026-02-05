@@ -295,7 +295,12 @@ const viewer = EmbedPDF.init({
     label: 'Close',
     icon: 'close-x',
     action: () => {
-      document.getElementById('pdf-viewer').style.display = 'none';
+      const el = document.getElementById('pdf-viewer');
+      el.classList.add('closing');
+      el.addEventListener('transitionend', () => {
+        el.style.display = 'none';
+        el.classList.remove('closing');
+      }, { once: true });
     }
   });
 

@@ -700,6 +700,11 @@ html, body {
   height: 100vh;
   z-index: 1000;
   background: white;
+  opacity: 1;
+  transition: opacity 0.3s ease;
+}
+#pdf-viewer.closing {
+  opacity: 0;
 }
 
 .app {
@@ -1321,4 +1326,9 @@ html, body {
   width: 100vw;
   height: 95vh;
   background: white;
+  opacity: 1;
+  transition: opacity 0.2s ease;
+}
+#pdf-viewer.closing {
+  opacity: 0;
 }

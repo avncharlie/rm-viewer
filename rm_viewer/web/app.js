@@ -393,6 +393,5 @@ searchInput.addEventListener('blur', () => {
   }, 150);
 });
 
-
 // Initial render
-// refreshView();
+refreshView();
