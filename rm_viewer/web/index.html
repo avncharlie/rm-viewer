@@ -198,7 +198,7 @@
 
 import EmbedPDF from 'https://cdn.jsdelivr.net/npm/@embedpdf/snippet@2/dist/embedpdf.js';
 
-EmbedPDF.init({
+const viewer = EmbedPDF.init({
   type: 'container',
   target: document.getElementById('pdf-viewer'),
   src: '/RMViewer.pdf',
@@ -245,13 +245,97 @@ EmbedPDF.init({
   disabledCategories: [
     'annotation',
     'redaction',
-    'panel-comment',
+    // 'panel-comment',
     'page-settings',
     'zoom',
     'mode',
     'ui-menu'
   ]
 });
+
+// Replace document-menu button with a download/export button
+(async () => {
+  const registry = await viewer.registry;
+  const commands = registry.getPlugin('commands').provides();
+  const ui = registry.getPlugin('ui').provides();
+
+  // Register download icon (Tabler download icon)
+  viewer.registerIcon('download', {
+    viewBox: '0 0 24 24',
+    paths: [
+      { d: 'M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2 -2v-2', stroke: 'currentColor', fill: 'none' },
+      { d: 'M7 11l5 5l5 -5', stroke: 'currentColor', fill: 'none' },
+      { d: 'M12 4l0 12', stroke: 'currentColor', fill: 'none' }
+    ]
+  });
+
+  // Register close icon (Tabler X icon)
+  viewer.registerIcon('close-x', {
+    viewBox: '0 0 24 24',
+    paths: [
+      { d: 'M18 6l-12 12', stroke: 'currentColor', fill: 'none' },
+      { d: 'M6 6l12 12', stroke: 'currentColor', fill: 'none' }
+    ]
+  });
+
+  // Register download command - opens PDF in new tab (iOS: use share sheet to save to Files)
+  commands.registerCommand({
+    id: 'custom.download',
+    label: 'Download PDF',
+    icon: 'download',
+    action: () => {
+      const url = viewer.config?.src || '/RMViewer.pdf';
+      window.open(url, '_blank');
+    }
+  });
+
+  // Register close command - hides the PDF viewer
+  commands.registerCommand({
+    id: 'custom.close',
+    label: 'Close',
+    icon: 'close-x',
+    action: () => {
+      document.getElementById('pdf-viewer').style.display = 'none';
+    }
+  });
+
+  // Replace toolbar buttons
+  const schema = ui.getSchema();
+  const toolbar = schema.toolbars['main-toolbar'];
+  const items = JSON.parse(JSON.stringify(toolbar.items));
+
+  // Replace document-menu-button with download button
+  const leftGroup = items.find(item => item.id === 'left-group');
+  if (leftGroup) {
+    const idx = leftGroup.items.findIndex(item => item.id === 'document-menu-button');
+    if (idx !== -1) {
+      leftGroup.items[idx] = {
+        type: 'command-button',
+        id: 'download-button',
+        commandId: 'custom.download',
+        variant: 'icon'
+      };
+    }
+  }
+
+  // Replace comment-button with close button
+  const rightGroup = items.find(item => item.id === 'right-group');
+  if (rightGroup) {
+    const idx = rightGroup.items.findIndex(item => item.id === 'comment-button');
+    if (idx !== -1) {
+      rightGroup.items[idx] = {
+        type: 'command-button',
+        id: 'close-button',
+        commandId: 'custom.close',
+        variant: 'icon'
+      };
+    }
+  }
+
+  ui.mergeSchema({
+    toolbars: { 'main-toolbar': { ...toolbar, items } }
+  });
+})();
 
 // Fix: EmbedPDF hides pan/pointer buttons at certain widths - always show them
 function fixEmbedPDFToolbar() {
