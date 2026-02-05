@@ -699,7 +699,7 @@ html, body {
   width: 100vw;
   height: 100vh;
   z-index: 1000;
-  background: white;
+  background: var(--bgLight);
   opacity: 1;
   transition: opacity 0.3s ease;
 }
@@ -1318,17 +1318,19 @@ html, body {
   background: var(--bgLight);
 }
 
-/* pdf viewer */
-#pdf-viewer {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100vw;
-  height: 95vh;
-  background: white;
-  opacity: 1;
-  transition: opacity 0.2s ease;
-}
-#pdf-viewer.closing {
-  opacity: 0;
+/* pdf viewer – phone override: 95vh so Safari page-selector doesn't clip */
+@media (max-width: 600px) {
+  #pdf-viewer {
+    height: 95vh;
+  }
+  #pdf-viewer::after {
+    content: '';
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    width: 100vw;
+    height: 5vh;
+    background: var(--bgLight);
+    z-index: -1;
+  }
 }

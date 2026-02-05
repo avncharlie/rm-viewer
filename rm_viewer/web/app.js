@@ -1,3 +1,163 @@
+import EmbedPDF from './embedpdf/embedpdf.js';
+
+// ── EmbedPDF viewer ──────────────────────────────────────────────
+
+const viewer = EmbedPDF.init({
+  type: 'container',
+  target: document.getElementById('pdf-viewer'),
+  src: '/RMViewer.pdf',
+  theme: {
+    preference: 'light',
+    light: {
+      accent: {
+        primary: 'rgb(55, 50, 47)',
+        primaryHover: 'rgb(80, 75, 70)',
+        primaryActive: 'rgb(40, 35, 32)',
+        primaryLight: 'rgb(236, 230, 218)',
+        primaryForeground: 'rgb(249, 246, 241)'
+      },
+      background: {
+        app: 'rgb(249, 246, 241)',
+        surface: 'rgb(236, 230, 218)',
+        surfaceAlt: 'rgb(224, 218, 204)',
+        elevated: 'rgb(249, 246, 241)',
+        overlay: 'rgba(55, 50, 47, 0.5)',
+        input: 'rgb(249, 246, 241)'
+      },
+      foreground: {
+        primary: 'rgb(55, 50, 47)',
+        secondary: 'rgba(55, 50, 47, 0.8)',
+        muted: 'rgba(55, 50, 47, 0.5)',
+        disabled: 'rgba(55, 50, 47, 0.3)',
+        onAccent: 'rgb(249, 246, 241)'
+      },
+      interactive: {
+        hover: 'rgb(236, 230, 218)',
+        active: 'rgb(224, 218, 204)',
+        selected: 'rgb(249, 246, 241)',
+        focus:  'rgb(55, 50, 47)'
+      },
+      border: {
+        default: 'rgb(224, 218, 204)',
+        subtle: 'rgb(236, 230, 218)',
+        strong: 'rgb(55, 50, 47)'
+      }
+    }
+  },
+  scroll: {
+  },
+  disabledCategories: [
+    'annotation',
+    'redaction',
+    'page-settings',
+    'zoom',
+    'mode',
+    'ui-menu'
+  ]
+});
+
+(async () => {
+  const registry = await viewer.registry;
+  const commands = registry.getPlugin('commands').provides();
+  const ui = registry.getPlugin('ui').provides();
+
+  viewer.registerIcon('download', {
+    viewBox: '0 0 24 24',
+    paths: [
+      { d: 'M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2 -2v-2', stroke: 'currentColor', fill: 'none' },
+      { d: 'M7 11l5 5l5 -5', stroke: 'currentColor', fill: 'none' },
+      { d: 'M12 4l0 12', stroke: 'currentColor', fill: 'none' }
+    ]
+  });
+
+  viewer.registerIcon('close-x', {
+    viewBox: '0 0 24 24',
+    paths: [
+      { d: 'M18 6l-12 12', stroke: 'currentColor', fill: 'none' },
+      { d: 'M6 6l12 12', stroke: 'currentColor', fill: 'none' }
+    ]
+  });
+
+  commands.registerCommand({
+    id: 'custom.download',
+    label: 'Download PDF',
+    icon: 'download',
+    action: () => {
+      const url = viewer.config?.src || '/RMViewer.pdf';
+      window.open(url, '_blank');
+    }
+  });
+
+  commands.registerCommand({
+    id: 'custom.close',
+    label: 'Close',
+    icon: 'close-x',
+    action: () => {
+      const el = document.getElementById('pdf-viewer');
+      el.classList.add('closing');
+      el.addEventListener('transitionend', () => {
+        el.style.display = 'none';
+        el.classList.remove('closing');
+      }, { once: true });
+    }
+  });
+
+  const schema = ui.getSchema();
+  const toolbar = schema.toolbars['main-toolbar'];
+  const items = JSON.parse(JSON.stringify(toolbar.items));
+
+  const leftGroup = items.find(item => item.id === 'left-group');
+  if (leftGroup) {
+    const idx = leftGroup.items.findIndex(item => item.id === 'document-menu-button');
+    if (idx !== -1) {
+      leftGroup.items[idx] = {
+        type: 'command-button',
+        id: 'download-button',
+        commandId: 'custom.download',
+        variant: 'icon'
+      };
+    }
+  }
+
+  const rightGroup = items.find(item => item.id === 'right-group');
+  if (rightGroup) {
+    const idx = rightGroup.items.findIndex(item => item.id === 'comment-button');
+    if (idx !== -1) {
+      rightGroup.items[idx] = {
+        type: 'command-button',
+        id: 'close-button',
+        commandId: 'custom.close',
+        variant: 'icon'
+      };
+    }
+  }
+
+  ui.mergeSchema({
+    toolbars: { 'main-toolbar': { ...toolbar, items } }
+  });
+})();
+
+function fixEmbedPDFToolbar() {
+  const container = document.querySelector('embedpdf-container');
+  if (!container?.shadowRoot?.querySelector('[data-epdf-i="pan-button"]')) return false;
+  if (container.shadowRoot.querySelector('#epdf-toolbar-fix')) return true;
+
+  const style = document.createElement('style');
+  style.id = 'epdf-toolbar-fix';
+  style.textContent = `
+    [data-epdf-i="pan-button"],
+    [data-epdf-i="pointer-button"] {
+      display: flex !important;
+    }
+  `;
+  container.shadowRoot.appendChild(style);
+  return true;
+}
+const fixInterval = setInterval(() => { if (fixEmbedPDFToolbar()) clearInterval(fixInterval); }, 100);
+setTimeout(() => clearInterval(fixInterval), 10000);
+
+// ── File browser ─────────────────────────────────────────────────
+
 const FOLDER_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="48" viewBox="0 0 48 48" fill="currentColor">
   <path d="M21.9891 7L24.9891 14H45.5V41H3.5V7H21.9891ZM21.7252 14L20.0109 10H8C7.17157 10 6.5 10.6716 6.5 11.5V24C6.5 18.4772 10.9772 14 16.5 14H21.7252Z"></path>
 </svg>`;
