@@ -499,6 +499,71 @@ def stitch_ocr_text_layers(
     return pages_with_ocr, total_words
 
 
+def build_search_index(
+    output_pdf: Path,
+    rm_files: list[dict],
+    base_output_dir: Path,
+    search_index_path: Path
+) -> None:
+    """
+    Build a search index JSON file with backing PDF text and OCR text per page.
+
+    Must be called BEFORE stitch_ocr_text_layers() so that page.get_text()
+    returns only the original backing PDF text, not the stitched OCR layer.
+
+    :param output_pdf: Path to the remarks output PDF (before OCR stitching)
+    :param rm_files: List of rm file dicts with ocr_path entries
+    :param base_output_dir: Base output directory for resolving relative paths
+    :param search_index_path: Path to write the search_index.json
+    """
+    backing_pages = {}
+    ocr_pages = {}
+
+    # Extract text from backing PDF pages
+    doc = fitz.open(output_pdf)
+    for i in range(len(doc)):
+        text = doc[i].get_text().strip()
+        if text:
+            backing_pages[str(i + 1)] = text
+    doc.close()
+
+    # Extract OCR text from .ocr.json files
+    for rm_file in rm_files:
+        ocr_rel_path = rm_file.get('ocr_path')
+        if not ocr_rel_path:
+            continue
+
+        ocr_path = base_output_dir / ocr_rel_path
+        if not ocr_path.exists():
+            continue
+
+        try:
+            with open(ocr_path) as f:
+                ocr_result = json.load(f)
+
+            gcv_response = ocr_result.get('gcv_response', {})
+            responses = gcv_response.get('responses', [{}])
+            text_annotations = responses[0].get('textAnnotations', [])
+            if text_annotations:
+                full_text = text_annotations[0].get('description', '').strip()
+                if full_text:
+                    page_num = str(rm_file['index'] + 1)
+                    ocr_pages[page_num] = full_text
+        except Exception as e:
+            log.warning(f"Failed to read OCR for search index: {e}")
+
+    index = {}
+    if backing_pages:
+        index['backing_pages'] = backing_pages
+    if ocr_pages:
+        index['ocr_pages'] = ocr_pages
+
+    with open(search_index_path, 'w') as f:
+        json.dump(index, f, indent=2)
+
+    log.info(f"Search index: {len(backing_pages)} backing pages, {len(ocr_pages)} OCR pages")
+
+
 def parse_item(
     id: str,
     files: list[Path],
@@ -664,6 +729,10 @@ def parse_item(
         if f.name not in current_ocr_files:
             log.info(f"Removing orphaned OCR file: {f.name}")
             f.unlink()
+
+    # Build search index (before OCR stitching so page.get_text() returns only backing PDF text)
+    search_index_path = nb_output_dir / 'search_index.json'
+    build_search_index(output_pdf, rm_files, output_dir, search_index_path)
 
     # Stitch OCR text layers into the final PDF
     ocr_words = 0

@@ -3,6 +3,9 @@ import EmbedPDF from './embedpdf/embedpdf.js';
 // ── EmbedPDF viewer ──────────────────────────────────────────────
 
 let docManager;
+let scrollPlugin;
+let searchPlugin;
+let uiPlugin;
 let currentPdfUrl;
 
 const viewer = EmbedPDF.init({
@@ -64,6 +67,9 @@ document.getElementById('pdf-viewer').style.display = 'none';
   const commands = registry.getPlugin('commands').provides();
   const ui = registry.getPlugin('ui').provides();
   docManager = registry.getPlugin('document-manager').provides();
+  scrollPlugin = registry.getPlugin('scroll').provides();
+  searchPlugin = registry.getPlugin('search').provides();
+  uiPlugin = ui;
 
   viewer.registerIcon('download', {
     viewBox: '0 0 24 24',
@@ -264,14 +270,37 @@ function renderFolders(folders) {
   });
 }
 
-function openPdfViewer(url) {
+let viewerDocCounter = 0;
+let currentDocId = null;
+
+function openPdfViewer(url, pageNumber, searchQuery) {
   if (!docManager) return;
-  docManager.closeAllDocuments();
-  docManager.openDocumentUrl({ url, autoActivate: true });
+  const prevDocId = currentDocId;
+  const docId = 'viewer-doc-' + (++viewerDocCounter);
+  currentDocId = docId;
+  docManager.openDocumentUrl({ url, documentId: docId, autoActivate: true });
+  if (prevDocId) docManager.closeDocument(prevDocId);
   currentPdfUrl = url;
   const el = document.getElementById('pdf-viewer');
   el.style.display = '';
   el.classList.remove('closing');
+  const needsSearch = searchQuery && searchPlugin && uiPlugin;
+  const needsScroll = !needsSearch && pageNumber && pageNumber > 1 && scrollPlugin;
+  if (needsScroll || needsSearch) {
+    let unsub;
+    unsub = scrollPlugin.onLayoutReady((event) => {
+      if (event.documentId === docId) {
+        if (needsSearch) {
+          uiPlugin.forDocument(docId).toggleSidebar('right', 'main', 'search-panel');
+          searchPlugin.forDocument(docId).searchAllPages(searchQuery);
+        }
+        if (needsScroll) {
+          scrollPlugin.forDocument(docId).scrollToPage({ pageNumber, behavior: 'instant' });
+        }
+        if (unsub) unsub();
+      }
+    });
+  }
 }
 
 function renderDocuments(documents) {
@@ -303,7 +332,7 @@ function renderDocuments(documents) {
       <div class='doc_text2'>${secondaryText}</div>
     `;
     div.style.cursor = 'pointer';
-    div.addEventListener('click', () => openPdfViewer(doc.src));
+    div.addEventListener('click', () => openPdfViewer(doc.src, doc.openAt, doc.openAtSearch));
     grid.appendChild(div);
   });
 }
@@ -371,12 +400,14 @@ documentsData = [
     src: '/RMViewer.pdf',
     thumbnail: '/rmviewer.png',
     name: 'RMViewer',
-    currentPage: 1,
+    currentPage: 2,
     pageCount: 2,
     lastModified: '2025-02-01T08:30:00',
     lastOpened: '2025-02-01T08:30:00',
     dateCreated: '2025-01-15T10:00:00',
-    fileSize: 524000
+    fileSize: 524000,
+    openAt: 2,
+    openAtSearch: 'item'
   },
   {
     type: 'pdf',
@@ -388,19 +419,23 @@ documentsData = [
     lastModified: '2025-01-20T14:00:00',
     lastOpened: '2025-01-28T16:00:00',
     dateCreated: '2024-06-01T12:00:00',
-    fileSize: 2150000
+    fileSize: 2150000,
+    openAt: 5,
+    openAtSearch: null
   },
   {
     type: 'ebook',
-    src: '/getting-started.pdf',
+    src: '/everybody_always.pdf',
     thumbnail: '/everybody_always.png',
     name: 'Everybody, always',
     currentPage: 24,
-    pageCount: 300,
+    pageCount: 170,
     lastModified: '2025-01-18T20:00:00',
     lastOpened: '2025-01-30T21:00:00',
     dateCreated: '2024-11-10T09:00:00',
-    fileSize: 4500000
+    fileSize: 4500000,
+    openAt: 24,
+    openAtSearch: 'love'
   },
 ];
 
