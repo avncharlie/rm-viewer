@@ -314,8 +314,11 @@ function renderDocuments(documents) {
 
     let secondaryText;
     if (inSearchMode && doc.hits != null) {
-      // Search mode: show result count
-      secondaryText = `<span>${doc.hits} result${doc.hits !== 1 ? 's' : ''}</span>`;
+      if (doc.hits === 0 && doc.titleMatch) {
+        secondaryText = `<span>Title match</span>`;
+      } else {
+        secondaryText = `<span>${doc.hits} result${doc.hits !== 1 ? 's' : ''}</span>`;
+      }
     } else if (doc.type === 'epub') {
       // on hover, books show percent read
       const percent = Math.round((doc.currentPage / doc.pageCount) * 100);
@@ -336,10 +339,12 @@ function renderDocuments(documents) {
 
     const pdfUrl = `/api/tree/${doc.id}/pdf`;
 
-    // In search mode, open at the search query; otherwise open at current page
-    const openPage = (inSearchMode && doc.matches && doc.matches.length > 0)
+    // In search mode with content matches, open at match page with search;
+    // otherwise open normally (title-only matches open at current page)
+    const hasContentMatches = doc.matches && doc.matches.length > 0;
+    const openPage = (inSearchMode && hasContentMatches)
       ? doc.matches[0].page : doc.currentPage;
-    const openSearch = inSearchMode ? currentSearchQuery : null;
+    const openSearch = (inSearchMode && hasContentMatches) ? currentSearchQuery : null;
 
     div.innerHTML = `
       <div class='thumbnail ${doc.type}_thumbnail'>

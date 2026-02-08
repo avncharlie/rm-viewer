@@ -60,11 +60,16 @@ class RemarkableDocument(RemarkableItem):
     thumbnails_dir: Path | None = None
     thumbnail_pages: list[dict] = field(default_factory=list)
     search_index: Path | None = None
+    cover_page_number: int = 0
 
     def to_dict(self) -> dict:
         d = super().to_dict()
         d['currentPage'] = self.current_page
         d['pageCount'] = self.total_pages
         d['pdfSize'] = self.pdf_size
-        d['thumbnail'] = f'/api/tree/{self.id}/thumbnail/0'
+        if self.cover_page_number == -1:
+            thumb_page = max(0, self.current_page - 1)
+        else:
+            thumb_page = self.cover_page_number
+        d['thumbnail'] = f'/api/tree/{self.id}/thumbnail/{thumb_page}'
         return d

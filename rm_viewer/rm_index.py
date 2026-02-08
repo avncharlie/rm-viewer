@@ -229,18 +229,10 @@ class RemarkableIndex:
             if not title_match and not matches:
                 continue
 
-            # Deduplicate matches by page number (backing + ocr may overlap)
-            seen_pages = set()
-            unique_matches = []
-            for m in matches:
-                if m['page'] not in seen_pages:
-                    seen_pages.add(m['page'])
-                    unique_matches.append(m)
-
             result = item.to_dict()
             result['titleMatch'] = title_match
-            result['hits'] = len(unique_matches)
-            result['matches'] = unique_matches[:10]  # limit to 10 matches
+            result['hits'] = len(matches)
+            result['matches'] = matches[:10]  # limit to 10 matches
             results.append(result)
 
         return results

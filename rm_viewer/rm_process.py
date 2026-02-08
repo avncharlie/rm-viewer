@@ -606,11 +606,15 @@ def parse_item(
                 content = json.load(f)
                 pages = get_pages(content)
                 cover_page_number = content.get('coverPageNumber', 0)
-                last = content.get('cPages', {})\
-                    .get('lastOpened', {}).get('value', '')
-                if pages and last in pages:
-                    last_opened_page = pages.index(last) + 1
+                if 'cPages' in content:
+                    last = content['cPages']\
+                        .get('lastOpened', {}).get('value', '')
+                    if pages and last in pages:
+                        last_opened_page = pages.index(last) + 1
 
+    # Old-format docs store lastOpenedPage (0-indexed) in .metadata
+    if 'cPages' not in content and 'lastOpenedPage' in metadata:
+        last_opened_page = metadata['lastOpenedPage'] + 1
 
     # if name != 'Colours': return {}, 'skipped', {}
 
