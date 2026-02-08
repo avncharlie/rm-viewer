@@ -77,6 +77,7 @@ class RemarkableIndex:
             last_opened = None
             date_created = None
             file_type = 'pdf'  # default
+            cover_page_number = 0
 
             if xochitl_dir:
                 xochitl_path = self.output_dir / xochitl_dir
@@ -93,6 +94,7 @@ class RemarkableIndex:
                     with open(content_file) as f:
                         content = json.load(f)
                     file_type = content.get('fileType', 'pdf')
+                    cover_page_number = content.get('coverPageNumber', 0)
 
             # Resolve paths
             export_pdf = None
@@ -135,6 +137,7 @@ class RemarkableIndex:
                 thumbnails_dir=thumbnails_dir,
                 thumbnail_pages=raw.get('thumbnail_pages', []),
                 search_index=search_index_path,
+                cover_page_number=cover_page_number,
             )
             return doc
 

@@ -592,6 +592,7 @@ def parse_item(
 
     pages: list[str] = []
     last_opened_page = 1
+    cover_page_number = 0
     parent = ''
     name = ''
     for file in files:
@@ -604,6 +605,7 @@ def parse_item(
             with open(file) as f:
                 content = json.load(f)
                 pages = get_pages(content)
+                cover_page_number = content.get('coverPageNumber', 0)
                 last = content.get('cPages', {})\
                     .get('lastOpened', {}).get('value', '')
                 if pages and last in pages:
@@ -788,6 +790,7 @@ def parse_item(
         'thumbnail_pages': thumbnail_pages,
 
         'last_opened_page': last_opened_page,
+        'cover_page_number': cover_page_number,
         'total_pages': len(pages)
     }, status, stats
 

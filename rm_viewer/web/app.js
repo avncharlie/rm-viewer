@@ -410,9 +410,10 @@ function renderBreadcrumbs(path) {
 
     if (isFirst) {
       span.classList.add('breadcrumb_root');
-    } else if (isLast) {
+    }
+    if (isLast) {
       span.classList.add('breadcrumb_current');
-    } else {
+    } else if (!isFirst) {
       span.classList.add('breadcrumb_folder');
     }
 
@@ -666,6 +667,11 @@ sortDropdown.addEventListener('click', (e) => {
   // If sort dropdown clicked, stop click propagation so it doesn't trigger
   // global handler and close the dropdown.
   e.stopPropagation();
+});
+
+// Download zip button
+document.getElementById('download_zip').addEventListener('click', () => {
+  window.location.href = '/api/download/zip';
 });
 
 // ---------------------------------------------------------------------------

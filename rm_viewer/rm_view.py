@@ -3,12 +3,15 @@ import argparse
 
 from pathlib import Path
 
-from flask import Flask, send_from_directory, request, jsonify
+import zipfile
+from io import BytesIO
+
+from flask import Flask, send_from_directory, send_file, request, jsonify
 
 log = logging.getLogger(__name__)
 from .utils import validate_path
 from .rm_index import RemarkableIndex
-from .rm_items import RemarkableDocument
+from .rm_items import RemarkableDocument, RemarkableFolder
 
 STATIC_DIR = Path(__file__).with_name("web")
 
@@ -97,6 +100,34 @@ def create_app(output_dir: Path) -> Flask:
             'query': query,
             'results': results,
         })
+
+    @app.get("/api/download/zip")
+    def api_download_zip():
+        docs = []
+
+        def traverse(folder_id, path_prefix=""):
+            folder = index.get(folder_id)
+            if not isinstance(folder, RemarkableFolder):
+                return
+            for child_id in index.get_children(folder_id):
+                child = index.get(child_id)
+                if isinstance(child, RemarkableDocument) and child.export_pdf:
+                    archive_path = f"{path_prefix}{child.name}.pdf" if path_prefix else f"{child.name}.pdf"
+                    docs.append((archive_path, child.export_pdf))
+                elif isinstance(child, RemarkableFolder):
+                    new_prefix = f"{path_prefix}{child.name}/"
+                    traverse(child_id, new_prefix)
+
+        traverse('root')
+
+        buf = BytesIO()
+        with zipfile.ZipFile(buf, 'w', zipfile.ZIP_STORED) as zf:
+            for archive_path, pdf_path in docs:
+                zf.write(pdf_path, arcname=archive_path)
+        buf.seek(0)
+
+        return send_file(buf, mimetype='application/zip',
+                         as_attachment=True, download_name='remarkable.zip')
 
     return app
 

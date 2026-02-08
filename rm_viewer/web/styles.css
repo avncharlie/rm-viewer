@@ -41,45 +41,6 @@ html, body {
   box-sizing: border-box;
 }
 
-@font-face {
-  font-family: "reMarkable Sans";
-  src: url("/fonts/reMarkableSans.woff2") format("woff2");
-  font-style: normal;
-  font-weight: 300 700;
-}
-
-@font-face {
-  font-family: "reMarkable Serif";
-  src: url("/fonts/reMarkableSerifNormal.woff2") format("woff2");
-  font-style: normal;
-  font-weight: 300 800;
-}
-
-@font-face {
-  font-family: "reMarkable Serif Italic";
-  src: url("/fonts/reMarkableSerifItalic.woff2") format("woff2");
-  font-style: italic;
-  font-weight: 300 800;
-}
-
-:root {
-  --bgMoreDark: rgb(224,218,204);
-  --bgDark: rgb(236,230,218);
-  --bgLight: rgb(249,246,241);
-  --dark: rgb(55,50,47);
-  --grid-min-width: 200px;
-  --grid-min-width-mobile: 170px;
-}
-
-html, body {
-  min-height: 100%;
-  margin: 0;
-  font-family: "reMarkable Sans", sans-serif;
-  background-color: var(--bgLight);
-  color: var(--dark);
-}
-
-
 .app {
   height: 100%;
   padding: 20px;
@@ -187,7 +148,7 @@ html, body {
   gap: 8px;
   padding: 0 12px;
   font-size: 0.9rem;
-  transition: background-color 0.15s;
+  transition: background-color 0.1s;
 }
 
 .folder:focus {
@@ -336,6 +297,47 @@ html, body {
   border-radius: 0 10px 10px 0;
 }
 
+/* Breadcrumb bar (breadcrumbs + download button) */
+#breadcrumb_bar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 15px;
+}
+
+/* Download zip button */
+#download_zip {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  border-radius: 2px;
+  color: var(--dark);
+  flex-shrink: 0;
+  opacity: 0.7;
+}
+
+#download_zip svg {
+  width: 20px;
+  height: 20px;
+}
+
+@media (hover: hover) {
+  #download_zip:hover {
+    opacity: 1;
+    background-color: var(--bgDark);
+  }
+}
+
+@media (max-width: 600px) {
+  #download_zip {
+    display: none;
+  }
+}
+
 /* Breadcrumbs */
 #breadcrumbs {
   display: flex;
@@ -344,7 +346,8 @@ html, body {
   font-size: 1.1rem;
   white-space: nowrap;
   overflow-x: auto;
-  margin-bottom: 15px;
+  flex: 1;
+  min-width: 0;
   scrollbar-width: thin;
   scrollbar-color: var(--bgMoreDark) var(--bgLight);
 }
@@ -756,634 +759,6 @@ html, body {
 }
 #pdf-viewer.closing {
   opacity: 0;
-}
-
-.app {
-  height: 100%;
-  padding: 20px;
-}
-
-.rm_grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(var(--grid-min-width), 1fr));
-  gap: 15px;
-}
-
-@media (max-width: 600px) {
-  .rm_grid {
-    grid-template-columns: repeat(auto-fill, minmax(var(--grid-min-width-mobile), 1fr));
-  }
-}
-
-/* List view */
-.rm_grid.list_view {
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-}
-
-.rm_grid.list_view .document {
-  display: flex;
-  align-items: center;
-  gap: 15px;
-  padding: 10px 12px;
-  border-bottom: 1px solid var(--bgDark);
-  transition: background-color 0.15s;
-}
-
-.rm_grid.list_view .thumbnail {
-  flex-shrink: 0;
-  width: 50px;
-}
-
-.rm_grid.list_view .thumbnail img {
-  width: 100%;
-  height: auto;
-}
-
-.rm_grid.list_view .doc_text1 {
-  margin-top: 0;
-  flex: 1;
-  min-width: 0;
-}
-
-.rm_grid.list_view .doc_text2 {
-  margin-top: 0;
-  flex-shrink: 0;
-  text-align: right;
-}
-
-/* Folders in list view */
-#folder_grid.list_view {
-  margin-bottom: 0px;
-  background-color: transparent;
-}
-
-#folder_grid.list_view .folder {
-  width: 100%;
-  background-color: transparent;
-  border-bottom: 1px solid var(--bgDark);
-  height: auto;
-  padding: 10px;
-}
-
-#folder_grid.list_view .folder span:not(.folder_info) {
-  flex: 1;
-}
-
-#folder_grid.list_view .folder .folder_info {
-  display: block;
-  flex-shrink: 0;
-  font-weight: 300;
-  font-size: 0.85rem;
-  text-align: right;
-}
-
-/* Hide folder info in grid view */
-.folder .folder_info {
-  display: none;
-}
-
-#folder_grid {
-  margin-bottom: 30px;
-}
-
-#folder_grid:empty {
-  margin-bottom: 0;
-}
-
-.folder {
-  border: none;
-  font: inherit;
-  text-align: left;
-  color: inherit;
-  -webkit-tap-highlight-color: transparent;
-  background-color: var(--bgDark);
-  height: 40px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 0 12px;
-  font-size: 0.9rem;
-  transition: background-color 0.15s;
-}
-
-.folder:hover {
-  background-color: var(--bgMoreDark);
-}
-
-.folder:focus {
-  outline: none;
-}
-
-.folder:focus-visible {
-  outline: 2px solid var(--dark);
-}
-
-.folder svg {
-  width: 24px;
-  height: 24px;
-  margin-right: 2px;
-  fill: var(--dark);
-  flex-shrink: 0;
-}
-
-.folder span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.doc_text1 {
-  margin-top: 7px;
-  font-size: 1rem;
-  font-weight: 450;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.doc_text2 {
-  margin-top: 2px;
-  font-size: 0.85rem;
-  font-weight: 300;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  position: relative;
-}
-
-/* Ebook hover text toggle */
-.doc_text2_default,
-.doc_text2_hover {
-  transition: opacity 0.1s ease;
-}
-
-.doc_text2_hover {
-  position: absolute;
-  left: 0;
-  opacity: 0;
-}
-
-/* Right align hover text in list view */
-.list_view .doc_text2_hover {
-  left: auto;
-  right: 0;
-}
-
-@media (hover: hover) {
-  .document:hover .doc_text2_default {
-    opacity: 0;
-  }
-
-  .document:hover .doc_text2_hover {
-    opacity: 1;
-  }
-}
-
-.thumbnail img {
-  display: block;
-  border: 1px solid var(--bgDark);
-  transition: box-shadow 0.25s ease, transform 0.25s ease;
-}
-
-.document:hover .thumbnail img {
-  box-shadow: 0 0 13px rgba(0, 0, 0, 0.15);
-}
-
-/* Notebook thumbnails */
-.notebook_thumbnail {
-  position: relative;
-}
-
-.notebook_thumbnail::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 7px;
-  height: 100%;
-  background-color: var(--bgDark);
-  border-radius: 2px 0 0 2px;
-}
-
-.rm_grid.list_view .notebook_thumbnail::before {
-  width: 3px;
-}
-
-.notebook_thumbnail img {
-  border-radius: 0 10px 10px 0;
-}
-
-.ebook_thumbnail img {
-  border-radius: 0 10px 10px 0;
-}
-
-/* Breadcrumbs */
-#breadcrumbs {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 1.1rem;
-  white-space: nowrap;
-  overflow-x: auto;
-  margin-bottom: 15px;
-  scrollbar-width: thin;
-  scrollbar-color: var(--bgMoreDark) var(--bgLight);
-}
-
-#breadcrumbs::-webkit-scrollbar {
-  height: 6px;
-}
-
-#breadcrumbs::-webkit-scrollbar-track {
-  background: var(--bgLight);
-  border-radius: 3px;
-}
-
-#breadcrumbs::-webkit-scrollbar-thumb {
-  background: var(--bgMoreDark);
-  border-radius: 3px;
-}
-
-#breadcrumbs::-webkit-scrollbar-thumb:hover {
-  background: var(--bgDark);
-}
-
-.breadcrumb_item {
-  font-size: 1.3rem;
-  color: var(--dark);
-  text-decoration: none;
-  cursor: pointer;
-  padding: 8px;
-  border-radius: 3px;
-  font-weight: 300;
-}
-
-.breadcrumb_current {
-  cursor: default;
-}
-
-.breadcrumb_root {
-  font-family: "reMarkable Serif", serif;
-  font-weight: 350;
-  font-size: 1.8rem;
-}
-
-#breadcrumbs svg {
-  width: 16px;
-  height: 16px;
-  fill: var(--dark);
-  flex-shrink: 0;
-}
-
-/* Toolbar */
-#toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 15px;
-  gap: 10px;
-}
-
-/* Search Bar */
-#search_bar {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 6px 0;
-  flex: 1;
-  min-width: 150px;
-  border-bottom: 1px solid var(--bgMoreDark);
-  transition: border-color 0.15s, flex-grow 0.3s ease;
-}
-
-#search_bar:focus-within {
-  border-bottom-color: var(--dark);
-}
-
-#search_bar svg {
-  width: 20px;
-  height: 20px;
-  fill: var(--dark);
-  flex-shrink: 0;
-  opacity: 0.5;
-}
-
-#search_bar:focus-within svg {
-  opacity: 0.7;
-}
-
-#search_input {
-  flex: 1;
-  border: none;
-  background: transparent;
-  font: inherit;
-  font-size: 1rem;
-  color: var(--dark);
-  outline: none;
-}
-
-#search_input::placeholder {
-  color: var(--dark);
-  opacity: 0.4;
-}
-
-#search_clear {
-  display: none;
-  align-items: center;
-  justify-content: center;
-  background: none;
-  border: none;
-  padding: 2px;
-  cursor: pointer;
-  color: var(--dark);
-  opacity: 0.4;
-  flex-shrink: 0;
-  -webkit-tap-highlight-color: transparent;
-}
-
-#search_clear svg {
-  width: 20px;
-  height: 20px;
-}
-
-#search_bar.has_text #search_clear {
-  display: flex;
-}
-
-@media (hover: hover) {
-  #search_clear:hover {
-    opacity: 0.7;
-  }
-}
-
-/* Sort Widget */
-#sort_widget {
-  position: relative;
-  transition: opacity 0.2s ease, visibility 0.2s ease, width 0.3s ease;
-}
-
-/* When search is focused, hide sort widget */
-#toolbar.search_focused #sort_widget {
-  opacity: 0;
-  visibility: hidden;
-  width: 0;
-  padding: 0;
-  overflow: hidden;
-}
-
-#toolbar.search_focused #search_bar {
-  flex-grow: 10;
-}
-
-#sort_button {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  border: none;
-  background: transparent;
-  font: inherit;
-  font-size: 0.95rem;
-  color: var(--dark);
-  cursor: pointer;
-  white-space: nowrap;
-  flex-shrink: 0;
-  -webkit-tap-highlight-color: transparent;
-}
-
-/* Background when dropdown is open */
-#sort_widget.open #sort_button {
-  background-color: var(--bgDark);
-}
-
-/* Hover only on devices that support it */
-@media (hover: hover) {
-  #sort_button:hover {
-    background-color: var(--bgDark);
-  }
-}
-
-#sort_button .sort_chevron {
-  width: 15px;
-  height: 15px;
-  fill: var(--dark);
-  transform: rotate(90deg); /* Points down */
-}
-
-#sort_widget.open #sort_button .sort_chevron {
-  transform: rotate(-90deg);
-}
-
-/* Dropdown */
-#sort_dropdown {
-  position: absolute;
-  top: 100%;
-  right: 0;
-  margin-top: 4px;
-  background: white;
-  border: 1px solid var(--bgMoreDark);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-  z-index: 100;
-}
-
-#sort_dropdown.hidden {
-  display: none;
-}
-
-.sort_header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 12px 16px;
-  font-size: 1rem;
-  font-weight: 450;
-  border-bottom: 1px solid var(--bgDark);
-  cursor: pointer;
-}
-
-@media (hover: hover) {
-  .sort_header:hover {
-    background-color: var(--bgLight);
-  }
-}
-
-.sort_header svg {
-  width: 18px;
-  height: 18px;
-  fill: var(--dark);
-}
-
-.sort_options {
-  border-bottom: 1px solid var(--bgDark);
-}
-
-.sort_option {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  width: 100%;
-  padding: 12px 16px;
-  border: none;
-  background: transparent;
-  font: inherit;
-  font-size: 1rem;
-  color: var(--dark);
-  cursor: pointer;
-  text-align: left;
-  transition: background-color 0.1s;
-}
-
-@media (hover: hover) {
-  .sort_option:hover {
-    background-color: var(--bgLight);
-  }
-}
-
-.sort_option.selected {
-  background-color: var(--dark);
-  color: white;
-}
-
-@media (hover: hover) {
-  .sort_option.selected:hover {
-    background-color: var(--dark);
-  }
-}
-
-/* Sort icons - always take up space, visible only on selected */
-.sort_option .sort_icon {
-  width: 20px;
-  height: 20px;
-  fill: currentColor;
-  flex-shrink: 0;
-}
-
-/* Show asc icon but invisible (takes up space) */
-.sort_option .sort_asc {
-  display: block;
-  visibility: hidden;
-}
-
-/* Hide desc icon completely by default */
-.sort_option .sort_desc {
-  display: none;
-
-}
-
-/* When selected (ascending): show asc icon */
-.sort_option.selected:not(.desc) .sort_asc {
-  visibility: visible;
-}
-
-/* When selected (descending): hide asc, show desc */
-.sort_option.selected.desc .sort_asc {
-  display: none;
-}
-
-.sort_option.selected.desc .sort_desc {
-  display: block;
-}
-
-/* Grid section */
-.grid_section {
-  padding: 12px 16px;
-}
-
-.grid_label {
-  font-size: 0.95rem;
-  font-weight: 450;
-  margin-bottom: 10px;
-}
-
-.grid_options {
-  display: flex;
-  /* gap: 8px; */
-}
-
-.grid_option {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 45px;
-  height: 45px;
-  border: none;
-  background: transparent;
-  cursor: pointer;
-}
-
-@media (hover: hover) {
-  .grid_option:hover {
-    background-color: var(--bgDark);
-  }
-}
-
-.grid_option.selected {
-  background-color: var(--dark);
-}
-
-.grid_option svg {
-  width: 22px;
-  height: 22px;
-  fill: var(--dark);
-}
-
-.grid_option.selected svg {
-  fill: white;
-}
-
-/* css for pdf viewer */
-#pdf_container {
-  flex: 1;
-  overflow: auto;
-  display: flex;
-  justify-content: center;
-  padding: 20px;
-  background: var(--bgLight);
-}
-
-.page_wrapper {
-  box-shadow: 0 4px 20px rgba(0,0,0,0.15);
-}
-
-/* Critical: text layer styling */
-.text_layer {
-  overflow: hidden;
-  opacity: 0.2;
-  line-height: 1.0;
-}
-
-.text_layer > span {
-  color: transparent;
-  position: absolute;
-  white-space: pre;
-  pointer-events: all;
-}
-
-.text_layer ::selection {
-  background: rgba(0, 0, 255, 0.3);
-}
-
-/* Search highlight */
-.search_highlight {
-  background-color: rgba(255, 230, 0, 0.5);
-  color: transparent;
-  border-radius: 2px;
-}
-
-.search_box {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.search_box input {
-  padding: 6px 10px;
-  border: 1px solid var(--bgMoreDark);
-  border-radius: 4px;
-  font: inherit;
-  background: var(--bgLight);
 }
 
 /* pdf viewer – phone override: 95vh so Safari page-selector doesn't clip */
