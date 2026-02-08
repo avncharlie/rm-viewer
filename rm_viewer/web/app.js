@@ -173,6 +173,39 @@ const fixInterval = setInterval(() => { if (forcePanPointerOnScreen()) clearInte
 setTimeout(() => clearInterval(fixInterval), 10000);
 
 // ---------------------------------------------------------------------------
+//   API HELPERS
+// ---------------------------------------------------------------------------
+
+async function fetchItem(id) {
+  const res = await fetch(`/api/tree/${id}`);
+  if (!res.ok) return null;
+  return res.json();
+}
+
+async function fetchChildren(id) {
+  const res = await fetch(`/api/tree/${id}/children`);
+  if (!res.ok) return [];
+  return res.json();
+}
+
+async function fetchBatch(ids) {
+  if (!ids.length) return {};
+  const res = await fetch('/api/tree/batch', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(ids),
+  });
+  if (!res.ok) return {};
+  return res.json();
+}
+
+async function searchDocuments(query) {
+  const res = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
+  if (!res.ok) return { query: '', results: [] };
+  return res.json();
+}
+
+// ---------------------------------------------------------------------------
 //   FILE BROWSER
 // ---------------------------------------------------------------------------
 
@@ -180,7 +213,13 @@ setTimeout(() => clearInterval(fixInterval), 10000);
 let foldersData = [];
 let documentsData = [];
 // current sorting method
-let currentSort = { field: 'modified', desc: false };
+let currentSort = { field: 'opened', desc: true };
+// current folder ID for navigation
+let currentFolderId = 'root';
+// search mode state
+let inSearchMode = false;
+let currentSearchQuery = '';
+let savedSort = null; // saved sort state before entering search mode
 
 // for opening documents with embedpdf viewer
 let viewerDocCounter = 0;
@@ -199,7 +238,7 @@ const FOLDER_EMPTY_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="48" vi
 function sortItems(items, field, desc, isFolder = false) {
   const sorted = [...items].sort((a, b) => {
     let valA, valB;
-    
+
     switch (field) {
       case 'modified':
         valA = new Date(a.lastModified).getTime();
@@ -214,12 +253,16 @@ function sortItems(items, field, desc, isFolder = false) {
         valB = new Date(b.dateCreated).getTime();
         break;
       case 'size':
-        valA = isFolder ? a.totalSize : a.fileSize;
-        valB = isFolder ? b.totalSize : b.fileSize;
+        valA = isFolder ? (a.totalSize || 0) : (a.pdfSize || a.fileSize || 0);
+        valB = isFolder ? (b.totalSize || 0) : (b.pdfSize || b.fileSize || 0);
         break;
       case 'pages':
         valA = isFolder ? a.itemCount : a.pageCount;
         valB = isFolder ? b.itemCount : b.pageCount;
+        break;
+      case 'results':
+        valA = a.hits || 0;
+        valB = b.hits || 0;
         break;
       case 'alpha':
         valA = a.name.toLowerCase();
@@ -228,10 +271,10 @@ function sortItems(items, field, desc, isFolder = false) {
       default:
         return 0;
     }
-    
+
     return desc ? valB - valA : valA - valB;
   });
-  
+
   return sorted;
 }
 
@@ -239,20 +282,21 @@ function sortItems(items, field, desc, isFolder = false) {
 function renderFolders(folders) {
   const grid = document.getElementById('folder_grid');
   grid.innerHTML = '';
-  
+
   const sortedFolders = sortItems(folders, currentSort.field, currentSort.desc, true);
-  
+
   sortedFolders.forEach(folder => {
     const btn = document.createElement('button');
     btn.className = 'folder';
 
-    const infoText = `${folder.itemCount} item${folder.itemCount !== 1 ? 's' : ''}`; 
+    const infoText = `${folder.itemCount} item${folder.itemCount !== 1 ? 's' : ''}`;
 
     btn.innerHTML = `
       ${folder.itemCount === 0 ? FOLDER_EMPTY_ICON : FOLDER_ICON}
       <span>${folder.name}</span>
       <span class="folder_info">${infoText}</span>
     `;
+    btn.addEventListener('click', () => navigateTo(folder.id));
     grid.appendChild(btn);
   });
 }
@@ -261,16 +305,19 @@ function renderFolders(folders) {
 function renderDocuments(documents) {
   const grid = document.getElementById('document_grid');
   grid.innerHTML = '';
-  
+
   const sortedDocs = sortItems(documents, currentSort.field, currentSort.desc, false);
-  
+
   sortedDocs.forEach(doc => {
     const div = document.createElement('button');
     div.className = 'document';
-    
+
     let secondaryText;
-    // on hover, books show percent read
-    if (doc.type === 'ebook') {
+    if (inSearchMode && doc.hits != null) {
+      // Search mode: show result count
+      secondaryText = `<span>${doc.hits} result${doc.hits !== 1 ? 's' : ''}</span>`;
+    } else if (doc.type === 'epub') {
+      // on hover, books show percent read
       const percent = Math.round((doc.currentPage / doc.pageCount) * 100);
       secondaryText = `
         <span class="doc_text2_default">Page ${doc.currentPage} of ${doc.pageCount}</span>
@@ -279,16 +326,30 @@ function renderDocuments(documents) {
     } else {
       secondaryText = `<span>Page ${doc.currentPage} of ${doc.pageCount}</span>`;
     }
-    
+
+    // In search mode, use thumbnail of the first matched page if available
+    let thumbnailUrl = doc.thumbnail || '';
+    if (inSearchMode && doc.matches && doc.matches.length > 0) {
+      const firstMatchPage = doc.matches[0].page - 1; // convert 1-based to 0-based
+      thumbnailUrl = `/api/tree/${doc.id}/thumbnail/${firstMatchPage}`;
+    }
+
+    const pdfUrl = `/api/tree/${doc.id}/pdf`;
+
+    // In search mode, open at the search query; otherwise open at current page
+    const openPage = (inSearchMode && doc.matches && doc.matches.length > 0)
+      ? doc.matches[0].page : doc.currentPage;
+    const openSearch = inSearchMode ? currentSearchQuery : null;
+
     div.innerHTML = `
       <div class='thumbnail ${doc.type}_thumbnail'>
-        <img src="${doc.thumbnail}" width="100%"> 
+        <img src="${thumbnailUrl}" width="100%">
       </div>
       <div class='doc_text1'>${doc.name}</div>
       <div class='doc_text2'>${secondaryText}</div>
     `;
     div.style.cursor = 'pointer';
-    div.addEventListener('click', () => openPdfViewer(doc.src, doc.openAt, doc.openAtSearch));
+    div.addEventListener('click', () => openPdfViewer(pdfUrl, openPage, openSearch));
     grid.appendChild(div);
   });
 }
@@ -363,16 +424,46 @@ function renderBreadcrumbs(path) {
   });
 }
 
-function navigateTo(id) {
-  console.log('Navigate to:', id);
-}
+// ---------------------------------------------------------------------------
+//   NAVIGATION
+// ---------------------------------------------------------------------------
 
-renderBreadcrumbs([
-  { id: 'root', name: 'My files' },
-  { id: 'books', name: 'Books' },
-  { id: 'theology', name: 'Systematic Theology' },
-  { id: 'theology', name: 'Systematic Theology' },
-]);
+async function navigateTo(id) {
+  if (inSearchMode) exitSearchSort();
+  inSearchMode = false;
+  currentSearchQuery = '';
+  currentFolderId = id;
+
+  // Clear search input when navigating
+  searchInput.value = '';
+
+  // Fetch folder metadata (for breadcrumbs) and children IDs in parallel
+  const [item, childIds] = await Promise.all([
+    fetchItem(id),
+    fetchChildren(id),
+  ]);
+
+  if (!item) return;
+
+  // Batch fetch all children metadata
+  const childrenMap = await fetchBatch(childIds);
+
+  // Split into folders and documents
+  foldersData = [];
+  documentsData = [];
+  for (const childId of childIds) {
+    const child = childrenMap[childId];
+    if (!child) continue;
+    if (child.type === 'folder') {
+      foldersData.push(child);
+    } else {
+      documentsData.push(child);
+    }
+  }
+
+  renderBreadcrumbs(item.path || [{ id: 'root', name: 'My files' }]);
+  refreshView();
+}
 
 // Sort menu
 const sortButton = document.getElementById('sort_button');
@@ -380,7 +471,6 @@ const sortDropdown = document.getElementById('sort_dropdown');
 const sortWidget = document.getElementById('sort_widget');
 const sortLabel = document.getElementById('sort_label');
 const sortHeader = document.querySelector('.sort_header');
-const sortOptions = document.querySelectorAll('.sort_option');
 const gridOptions = document.querySelectorAll('.grid_option');
 const gridLabel = document.getElementById('grid_label');
 
@@ -404,33 +494,121 @@ sortHeader.addEventListener('click', () => {
   sortWidget.classList.remove('open');
 });
 
-// Sort option click
-sortOptions.forEach(option => {
-  option.addEventListener('click', () => {
-    const wasSelected = option.classList.contains('selected');
-    const sortField = option.dataset.sort;
-    
-    if (wasSelected) {
-      // Toggle ascending/descending
-      option.classList.toggle('desc');
-      currentSort.desc = option.classList.contains('desc');
-    } else {
-      // Select new option
-      sortOptions.forEach(o => {
+// Sort option click — use event delegation so dynamically added options work
+const sortOptionsContainer = document.querySelector('.sort_options');
+
+// Load saved sort preferences from localStorage
+{
+  const savedField = localStorage.getItem('rmviewer.sort.field');
+  const savedDesc = localStorage.getItem('rmviewer.sort.desc');
+  if (savedField) currentSort.field = savedField;
+  if (savedDesc !== null) currentSort.desc = savedDesc === 'true';
+}
+
+// Sync DOM to match currentSort initial value
+{
+  const allOptions = sortOptionsContainer.querySelectorAll('.sort_option');
+  allOptions.forEach(o => { o.classList.remove('selected'); o.classList.remove('desc'); });
+  const match = sortOptionsContainer.querySelector(`.sort_option[data-sort="${currentSort.field}"]`);
+  if (match) {
+    match.classList.add('selected');
+    if (currentSort.desc) match.classList.add('desc');
+    sortLabel.textContent = match.querySelector('span').textContent;
+  }
+}
+
+sortOptionsContainer.addEventListener('click', (e) => {
+  const option = e.target.closest('.sort_option');
+  if (!option) return;
+
+  const wasSelected = option.classList.contains('selected');
+  const sortField = option.dataset.sort;
+
+  if (wasSelected) {
+    // Toggle ascending/descending
+    option.classList.toggle('desc');
+    currentSort.desc = option.classList.contains('desc');
+  } else {
+    // Select new option
+    sortOptionsContainer.querySelectorAll('.sort_option').forEach(o => {
+      o.classList.remove('selected');
+      o.classList.remove('desc');
+    });
+    option.classList.add('selected');
+    currentSort.field = sortField;
+    currentSort.desc = false;
+  }
+
+  sortLabel.textContent = option.querySelector('span').textContent;
+
+  // Save sort preference (skip transient "results" sort in search mode)
+  if (!inSearchMode) {
+    localStorage.setItem('rmviewer.sort.field', currentSort.field);
+    localStorage.setItem('rmviewer.sort.desc', currentSort.desc);
+  }
+
+  // Re-render with new sort
+  refreshView();
+});
+
+// SVG icons for the results sort option (reuse the same asc/desc icons)
+const SORT_ASC_SVG = sortOptionsContainer.querySelector('.sort_asc').outerHTML;
+const SORT_DESC_SVG = sortOptionsContainer.querySelector('.sort_desc').outerHTML;
+
+function enterSearchSort() {
+  // Save current sort state
+  const selectedOption = sortOptionsContainer.querySelector('.sort_option.selected');
+  savedSort = {
+    field: currentSort.field,
+    desc: currentSort.desc,
+    selectedDataSort: selectedOption ? selectedOption.dataset.sort : 'modified',
+    isDesc: selectedOption ? selectedOption.classList.contains('desc') : false,
+  };
+
+  // Add "Results" option at the top
+  const resultsBtn = document.createElement('button');
+  resultsBtn.className = 'sort_option selected';
+  resultsBtn.dataset.sort = 'results';
+  resultsBtn.innerHTML = `${SORT_ASC_SVG}${SORT_DESC_SVG}<span>Results</span>`;
+  sortOptionsContainer.prepend(resultsBtn);
+
+  // Deselect previous option
+  sortOptionsContainer.querySelectorAll('.sort_option').forEach(o => {
+    if (o !== resultsBtn) {
+      o.classList.remove('selected');
+      o.classList.remove('desc');
+    }
+  });
+
+  // Set sort to results descending (most results first)
+  currentSort.field = 'results';
+  currentSort.desc = true;
+  resultsBtn.classList.add('desc');
+  sortLabel.textContent = 'Results';
+}
+
+function exitSearchSort() {
+  // Remove the "Results" option
+  const resultsOption = sortOptionsContainer.querySelector('.sort_option[data-sort="results"]');
+  if (resultsOption) resultsOption.remove();
+
+  // Restore previous sort state
+  if (savedSort) {
+    currentSort.field = savedSort.field;
+    currentSort.desc = savedSort.desc;
+    const toSelect = sortOptionsContainer.querySelector(`.sort_option[data-sort="${savedSort.selectedDataSort}"]`);
+    if (toSelect) {
+      sortOptionsContainer.querySelectorAll('.sort_option').forEach(o => {
         o.classList.remove('selected');
         o.classList.remove('desc');
       });
-      option.classList.add('selected');
-      currentSort.field = sortField;
-      currentSort.desc = false;
+      toSelect.classList.add('selected');
+      if (savedSort.isDesc) toSelect.classList.add('desc');
+      sortLabel.textContent = toSelect.querySelector('span').textContent;
     }
-    
-    sortLabel.textContent = option.querySelector('span').textContent;
-    
-    // Re-render with new sort
-    refreshView();
-  });
-});
+    savedSort = null;
+  }
+}
 
 const gridSizes = {
   large: { desktop: '280px', mobile: '200px' },
@@ -448,10 +626,11 @@ gridOptions.forEach(option => {
     e.stopPropagation();
     gridOptions.forEach(o => o.classList.remove('selected'));
     option.classList.add('selected');
-    
+
     const gridType = option.dataset.grid;
     gridLabel.textContent = gridLabels[gridType];
-    
+    localStorage.setItem('rmviewer.grid', gridType);
+
     if (gridType === 'list') {
       folderGrid.classList.add('list_view');
       documentGrid.classList.add('list_view');
@@ -460,13 +639,22 @@ gridOptions.forEach(option => {
       folderGrid.classList.remove('list_view');
       documentGrid.classList.remove('list_view');
       document.body.classList.remove('list_view_active');
-      
+
       const sizes = gridSizes[gridType];
       document.documentElement.style.setProperty('--grid-min-width', sizes.desktop);
       document.documentElement.style.setProperty('--grid-min-width-mobile', sizes.mobile);
     }
   });
 });
+
+// Restore saved grid preference from localStorage
+{
+  const savedGrid = localStorage.getItem('rmviewer.grid');
+  if (savedGrid) {
+    const match = document.querySelector(`.grid_option[data-grid="${savedGrid}"]`);
+    if (match) match.click();
+  }
+}
 
 // Close dropdown when clicking outside
 document.addEventListener('click', () => {
@@ -480,18 +668,71 @@ sortDropdown.addEventListener('click', (e) => {
   e.stopPropagation();
 });
 
-// Hide sorting options when search is focussed
+// ---------------------------------------------------------------------------
+//   SEARCH
+// ---------------------------------------------------------------------------
+
 const toolbar = document.getElementById('toolbar');
 const searchInput = document.getElementById('search_input');
+const searchBar = document.getElementById('search_bar');
+const searchClear = document.getElementById('search_clear');
+
+let searchDebounceTimer = null;
+
+function updateSearchClear() {
+  searchBar.classList.toggle('has_text', searchInput.value.length > 0);
+}
+
+searchClear.addEventListener('click', () => {
+  searchInput.value = '';
+  updateSearchClear();
+  if (inSearchMode) {
+    navigateTo(currentFolderId);
+  }
+});
+
 searchInput.addEventListener('focus', () => {
   toolbar.classList.add('search_focused');
   sortDropdown.classList.add('hidden');
   sortWidget.classList.remove('open');
 });
+
 searchInput.addEventListener('blur', () => {
   setTimeout(() => {
     toolbar.classList.remove('search_focused');
   }, 150);
+});
+
+searchInput.addEventListener('input', () => {
+  clearTimeout(searchDebounceTimer);
+  updateSearchClear();
+  const query = searchInput.value.trim();
+
+  if (!query) {
+    // Empty query — return to current folder
+    if (inSearchMode) {
+      navigateTo(currentFolderId);
+    }
+    return;
+  }
+
+  searchDebounceTimer = setTimeout(async () => {
+    const result = await searchDocuments(query);
+    if (!inSearchMode) enterSearchSort();
+    inSearchMode = true;
+    currentSearchQuery = query;
+
+    // Show search results breadcrumb
+    renderBreadcrumbs([
+      { id: 'root', name: 'Search results' },
+    ]);
+
+    // Hide folders in search mode, show all matching documents
+    foldersData = [];
+    documentsData = result.results || [];
+
+    refreshView();
+  }, 50);
 });
 
 function refreshView() {
@@ -499,102 +740,5 @@ function refreshView() {
   renderDocuments(documentsData);
 }
 
-// Initialize data
-foldersData = [
-  { 
-    name: 'Articles', 
-    itemCount: 12, 
-    lastModified: '2025-01-30T10:30:00',
-    lastOpened: '2025-01-31T08:00:00',
-    dateCreated: '2024-06-15T14:00:00',
-    totalSize: 45000000
-  },
-  { 
-    name: 'Books', 
-    itemCount: 8, 
-    lastModified: '2025-01-28T16:45:00',
-    lastOpened: '2025-01-29T12:00:00',
-    dateCreated: '2024-03-20T09:30:00',
-    totalSize: 120000000
-  },
-  { 
-    name: 'Comics', 
-    itemCount: 3, 
-    lastModified: '2025-01-15T11:00:00',
-    lastOpened: '2025-01-20T15:30:00',
-    dateCreated: '2024-08-10T18:00:00',
-    totalSize: 85000000
-  },
-  { 
-    name: 'Development', 
-    itemCount: 25, 
-    lastModified: '2025-02-01T09:00:00',
-    lastOpened: '2025-02-01T09:00:00',
-    dateCreated: '2024-01-05T10:00:00',
-    totalSize: 15000000
-  },
-  { 
-    name: 'Papers', 
-    itemCount: 7, 
-    lastModified: '2025-01-25T14:20:00',
-    lastOpened: '2025-01-26T11:00:00',
-    dateCreated: '2024-09-01T08:00:00',
-    totalSize: 28000000
-  },
-  { 
-    name: 'Recipes', 
-    itemCount: 0, 
-    lastModified: '2024-12-20T10:00:00',
-    lastOpened: '2024-12-25T18:00:00',
-    dateCreated: '2024-12-20T10:00:00',
-    totalSize: 0
-  },
-];
-
-documentsData = [
-  {
-    type: 'notebook',
-    src: '/RMViewer.pdf',
-    thumbnail: '/rmviewer.png',
-    name: 'RMViewer',
-    currentPage: 2,
-    pageCount: 2,
-    lastModified: '2025-02-01T08:30:00',
-    lastOpened: '2025-02-01T08:30:00',
-    dateCreated: '2025-01-15T10:00:00',
-    fileSize: 524000,
-    openAt: 2,
-    openAtSearch: 'item'
-  },
-  {
-    type: 'pdf',
-    src: '/getting-started.pdf',
-    thumbnail: '/getting_started.png',
-    name: 'Getting started',
-    currentPage: 5,
-    pageCount: 9,
-    lastModified: '2025-01-20T14:00:00',
-    lastOpened: '2025-01-28T16:00:00',
-    dateCreated: '2024-06-01T12:00:00',
-    fileSize: 2150000,
-    openAt: 5,
-    openAtSearch: null
-  },
-  {
-    type: 'ebook',
-    src: '/everybody_always.pdf',
-    thumbnail: '/everybody_always.png',
-    name: 'Everybody, always',
-    currentPage: 24,
-    pageCount: 170,
-    lastModified: '2025-01-18T20:00:00',
-    lastOpened: '2025-01-30T21:00:00',
-    dateCreated: '2024-11-10T09:00:00',
-    fileSize: 4500000,
-    openAt: 24,
-    openAtSearch: 'love'
-  },
-];
-
-// Initial render
-refreshView();
+// Initial load
+navigateTo('root');

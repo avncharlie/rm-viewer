@@ -113,15 +113,6 @@ html, body {
   transition: background-color 0.15s;
 }
 
-.rm_grid.list_view .document:hover {
-  background-color: var(--bgDark);
-}
-
-/* Disable the thumbnail shadow hover in list view */
-.rm_grid.list_view .document:hover .thumbnail img {
-  box-shadow: none;
-}
-
 .rm_grid.list_view .thumbnail {
   flex-shrink: 0;
   width: 50px;
@@ -156,10 +147,6 @@ html, body {
   border-bottom: 1px solid var(--bgDark);
   height: auto;
   padding: 10px;
-}
-
-#folder_grid.list_view .folder:hover {
-  background-color: var(--bgDark);
 }
 
 #folder_grid.list_view .folder span:not(.folder_info) {
@@ -201,10 +188,6 @@ html, body {
   padding: 0 12px;
   font-size: 0.9rem;
   transition: background-color 0.15s;
-}
-
-.folder:hover {
-  background-color: var(--bgMoreDark);
 }
 
 .folder:focus {
@@ -294,8 +277,35 @@ html, body {
   transition: box-shadow 0.25s ease, transform 0.25s ease;
 }
 
-.document:hover .thumbnail img {
-  box-shadow: 0 0 13px rgba(0, 0, 0, 0.15);
+/* Hover effects only on devices that support true hover */
+@media (hover: hover) {
+  .folder:hover {
+    background-color: var(--bgMoreDark);
+  }
+
+  .document:hover .thumbnail img {
+    box-shadow: 0 0 13px rgba(0, 0, 0, 0.15);
+  }
+
+  .rm_grid.list_view .document:hover {
+    background-color: var(--bgDark);
+  }
+
+  .rm_grid.list_view .document:hover .thumbnail img {
+    box-shadow: none;
+  }
+
+  #folder_grid.list_view .folder:hover {
+    background-color: var(--bgDark);
+  }
+
+  .breadcrumb_item:hover {
+    background-color: var(--bgDark);
+  }
+
+  .breadcrumb_current:hover {
+    background-color: inherit;
+  }
 }
 
 /* Notebook thumbnails */
@@ -367,16 +377,8 @@ html, body {
   font-weight: 300;
 }
 
-.breadcrumb_item:hover {
-  background-color: var(--bgDark);
-}
-
 .breadcrumb_current {
   cursor: default;
-}
-
-.breadcrumb_current:hover {
-  background-color: inherit;
 }
 
 .breadcrumb_root {
@@ -442,6 +444,35 @@ html, body {
 #search_input::placeholder {
   color: var(--dark);
   opacity: 0.4;
+}
+
+#search_clear {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  padding: 2px;
+  cursor: pointer;
+  color: var(--dark);
+  opacity: 0.4;
+  flex-shrink: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+
+#search_clear svg {
+  width: 20px;
+  height: 20px;
+}
+
+#search_bar.has_text #search_clear {
+  display: flex;
+}
+
+@media (hover: hover) {
+  #search_clear:hover {
+    opacity: 0.7;
+  }
 }
 
 /* Sort Widget */
@@ -529,8 +560,10 @@ html, body {
   cursor: pointer;
 }
 
-.sort_header:hover {
-  background-color: var(--bgLight);
+@media (hover: hover) {
+  .sort_header:hover {
+    background-color: var(--bgLight);
+  }
 }
 
 .sort_header svg {
@@ -559,8 +592,10 @@ html, body {
   transition: background-color 0.1s;
 }
 
-.sort_option:hover {
-  background-color: var(--bgLight);
+@media (hover: hover) {
+  .sort_option:hover {
+    background-color: var(--bgLight);
+  }
 }
 
 .sort_option.selected {
@@ -568,8 +603,10 @@ html, body {
   color: white;
 }
 
-.sort_option.selected:hover {
-  background-color: var(--dark);
+@media (hover: hover) {
+  .sort_option.selected:hover {
+    background-color: var(--dark);
+  }
 }
 
 /* Sort icons - always take up space, visible only on selected */
@@ -632,8 +669,10 @@ html, body {
   cursor: pointer;
 }
 
-.grid_option:hover {
-  background-color: var(--bgDark);
+@media (hover: hover) {
+  .grid_option:hover {
+    background-color: var(--bgDark);
+  }
 }
 
 .grid_option.selected {
@@ -752,15 +791,6 @@ html, body {
   transition: background-color 0.15s;
 }
 
-.rm_grid.list_view .document:hover {
-  background-color: var(--bgDark);
-}
-
-/* Disable the thumbnail shadow hover in list view */
-.rm_grid.list_view .document:hover .thumbnail img {
-  box-shadow: none;
-}
-
 .rm_grid.list_view .thumbnail {
   flex-shrink: 0;
   width: 50px;
@@ -795,10 +825,6 @@ html, body {
   border-bottom: 1px solid var(--bgDark);
   height: auto;
   padding: 10px;
-}
-
-#folder_grid.list_view .folder:hover {
-  background-color: var(--bgDark);
 }
 
 #folder_grid.list_view .folder span:not(.folder_info) {
@@ -994,16 +1020,8 @@ html, body {
   font-weight: 300;
 }
 
-.breadcrumb_item:hover {
-  background-color: var(--bgDark);
-}
-
 .breadcrumb_current {
   cursor: default;
-}
-
-.breadcrumb_current:hover {
-  background-color: inherit;
 }
 
 .breadcrumb_root {
@@ -1069,6 +1087,35 @@ html, body {
 #search_input::placeholder {
   color: var(--dark);
   opacity: 0.4;
+}
+
+#search_clear {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  padding: 2px;
+  cursor: pointer;
+  color: var(--dark);
+  opacity: 0.4;
+  flex-shrink: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+
+#search_clear svg {
+  width: 20px;
+  height: 20px;
+}
+
+#search_bar.has_text #search_clear {
+  display: flex;
+}
+
+@media (hover: hover) {
+  #search_clear:hover {
+    opacity: 0.7;
+  }
 }
 
 /* Sort Widget */
@@ -1156,8 +1203,10 @@ html, body {
   cursor: pointer;
 }
 
-.sort_header:hover {
-  background-color: var(--bgLight);
+@media (hover: hover) {
+  .sort_header:hover {
+    background-color: var(--bgLight);
+  }
 }
 
 .sort_header svg {
@@ -1186,8 +1235,10 @@ html, body {
   transition: background-color 0.1s;
 }
 
-.sort_option:hover {
-  background-color: var(--bgLight);
+@media (hover: hover) {
+  .sort_option:hover {
+    background-color: var(--bgLight);
+  }
 }
 
 .sort_option.selected {
@@ -1195,8 +1246,10 @@ html, body {
   color: white;
 }
 
-.sort_option.selected:hover {
-  background-color: var(--dark);
+@media (hover: hover) {
+  .sort_option.selected:hover {
+    background-color: var(--dark);
+  }
 }
 
 /* Sort icons - always take up space, visible only on selected */
@@ -1216,6 +1269,7 @@ html, body {
 /* Hide desc icon completely by default */
 .sort_option .sort_desc {
   display: none;
+
 }
 
 /* When selected (ascending): show asc icon */
@@ -1259,8 +1313,10 @@ html, body {
   cursor: pointer;
 }
 
-.grid_option:hover {
-  background-color: var(--bgDark);
+@media (hover: hover) {
+  .grid_option:hover {
+    background-color: var(--bgDark);
+  }
 }
 
 .grid_option.selected {
