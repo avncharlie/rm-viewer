@@ -54,12 +54,6 @@ else
     dropbearkey -f "$SSH_KEY"
 fi
 
-# Recreate .pub from private key if missing.
-if [ ! -f "$SSH_KEY.pub" ]; then
-    log "rebuilding missing public key: $SSH_KEY.pub"
-    dropbearkey -y -f "$SSH_KEY" | sed -n 's/^Public key portion is://p;/^ssh-/p' | tail -n 1 > "$SSH_KEY.pub"
-fi
-
 # ----------------------------------------------
 # install service
 # ----------------------------------------------

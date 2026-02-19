@@ -1,4 +1,15 @@
-Install instructions tested on python3.12 and python3.14.
+rm-viewer is a software to sync the contents of your reMarkable and view it
+from a web UI.
+ - It automatically syncs changes from your reMarkable as you use it.
+ - It does handwriting recongition on your handwriting, and creates PDFs with
+   overlayed invisible text, allowing you to search and copy your handwriting.
+ - It allows you to search all your notes.
+ - The viewer works great on a mobile phone.
+
+The following install instructions are tested on python3.12 and python3.14, on
+Ubuntu 24 and macOS.
+
+Install rsync.
 
 Install google chrome:
 $ curl -LO https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
@@ -6,21 +17,54 @@ $ apt install -y ./google-chrome-stable_current_amd64.deb
 
 For handwriting recongition, create a file called 'gcv_api_key' with your
 Google Cloud Vision API key in this directory.
+Use the scripts in debug/ to test your key and make sure it works.
 
 We have to use the legacy pip resolver to ignore some dependency conflicts that
-aren't actually conflicts.
+aren't actually conflicts while installing rm-viewer.
 $ python3 -m .venv venv
 $ source .venv/bin/activate
 $ pip install --use-deprecated=legacy-resolver -r requirements.txt
 
-Now, let's run a test. Set up sync folder (in rm-viewer directory):
+Set up sync folder (in rm-viewer directory):
 $ python3 -m rm_viewer syncd --install sync
+Note down the value it says to set SYNC_DIR to.
 
-follow instructions to do an initial scp into xochitl-dirty directory, and
-start viewer.
+Copy the device installation template directory
+$ cp -r .rm-viewer rm-viewer-install
+In the new folder (rm-viewer-install), fill in config.sh. You may want to set:
+  - REMOTE_USER and REMOTE_HOST (current user and hostname/ip)
+  - SYNC_DIR (full path of sync folder)
+  - RSYNC_REMOTE (path to rsync binary)
+  - DEBOUNCE is shortest interval between the device doing syncs, change if
+    needed.
 
-to install on device, copy .rm-viewer template to another folder, and fill in
-relevant fields in config.sh.
+Now, let's do an initial manual sync.
+
+Do an initial copy of your xochitl  directory (this is where your reMarkable
+files are stores) to the sync directory. Probably best to do this over the usb
+connection.
+
+ssh into your reMarkable and run:
+$ rsync -av \
+    --partial-dir .rsync-partial \
+    --no-compress \
+    --delete-delay \
+    --info=progress2,stats1 \
+    --rsync-path=/opt/homebrew/bin/rsync \
+    --exclude='*.thumbnails/***' \
+    -e 'ssh -i /home/root/key' \
+    /home/root/.local/share/remarkable/xochitl/ \
+    user@remote:/home/bigdog/remarkable/rm-viewer/sync/xochitl-dirty/
+If you want to create an ssh key, run:
+$ dropbearkey -f /home/root/key
+Delete the key afterwards as we will set up another one as part of the
+installation on the device.
+
+Then on the remote, run this (indicates to rm-viewer that we have files needing
+to be processed):
+$ touch sync/syncflag
+
+Now, let's do an initial manual process of the files, and test the webUI.
 
 then scp onto device to /home/root/.rm-viewer
 then run the following to make root and /etc writeable:

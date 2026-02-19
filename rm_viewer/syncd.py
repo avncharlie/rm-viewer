@@ -210,7 +210,7 @@ def rm_syncd(args: argparse.Namespace):
 {BOLD}Device config{RESET} {DIM}(set in .rm-viewer/config.sh):{RESET}
   SYNC_DIR="{YELLOW}{sd}{RESET}"
 
-{BOLD}Initial sync{RESET} {DIM}-- copy xochitl from tablet to the dirty dir:{RESET}
+{BOLD}Initial sync{RESET} {DIM}-- copy xochitl from tablet to the dirty dir (don't do this! follow the readme instead.):{RESET}
   {GREEN}scp -r root@<tablet-ip>:/home/root/.local/share/remarkable/xochitl/* {sd}/xochitl-dirty/{RESET}
   {GREEN}touch {sd}/syncflag{RESET}
 
