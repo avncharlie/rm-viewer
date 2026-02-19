@@ -764,7 +764,7 @@ html, body {
 /* pdf viewer – phone override: 95vh so Safari page-selector doesn't clip */
 @media (max-width: 600px) {
   #pdf-viewer {
-    height: 95vh;
+    height: 100vh; /* disable this, just make it full size all the time */
   }
   #pdf-viewer::after {
     content: '';
@@ -772,7 +772,7 @@ html, body {
     bottom: 0;
     left: 0;
     width: 100vw;
-    height: 5vh;
+    height: 0vh;
     background: var(--bgLight);
     z-index: -1;
   }

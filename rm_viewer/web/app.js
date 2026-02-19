@@ -8,6 +8,8 @@ let docManager;
 let scrollPlugin;
 let searchPlugin;
 let uiPlugin;
+let zoomPlugin;
+let viewportPlugin;
 let currentPdfUrl;
 let currentPdfLastModified = null;
 let resolveViewerReady;
@@ -78,6 +80,8 @@ document.getElementById('pdf-viewer').style.display = 'none';
   scrollPlugin = registry.getPlugin('scroll').provides();
   searchPlugin = registry.getPlugin('search').provides();
   uiPlugin = ui;
+  zoomPlugin = registry.getPlugin('zoom').provides();
+  viewportPlugin = registry.getPlugin('viewport')?.provides();
 
   // Download icon (very left of screen)
   viewer.registerIcon('download', {
@@ -129,6 +133,7 @@ document.getElementById('pdf-viewer').style.display = 'none';
       localStorage.removeItem('rmviewer.pdfItemId');
       localStorage.removeItem('rmviewer.pdfPage');
       currentPdfLastModified = null;
+      document.body.style.overflow = '';
       const el = document.getElementById('pdf-viewer');
       el.classList.add('closing');
       el.addEventListener('transitionend', () => {
@@ -397,6 +402,7 @@ function openPdfViewer(url, pageNumber, searchQuery) {
   const el = document.getElementById('pdf-viewer');
   el.style.display = '';
   el.classList.remove('closing');
+  document.body.style.overflow = 'hidden';
   // opening at searchQuery takes precedence over opening at pageNumber
   const needsSearch = searchQuery && searchPlugin && uiPlugin;
   const needsScroll = !needsSearch && pageNumber && pageNumber > 1 && scrollPlugin;
@@ -805,7 +811,26 @@ function refreshView() {
   }
 })();
 
-// Poll for server rebuilds and auto-refresh when detected
+// ---------------------------------------------------------------------------
+//   LIVE RELOAD
+// ---------------------------------------------------------------------------
+//
+// Poll /api/generation every 5s. The server increments this counter on each
+// /api/rebuild (triggered by syncd after processing new tablet data).
+//
+// When the generation changes:
+//   1. The folder view always refreshes.
+//   2. If a PDF is open, we HEAD the PDF URL to compare Last-Modified.
+//      - Unchanged file → do nothing (avoids disruptive reloads).
+//      - Changed file   → reload the PDF, preserving viewport state.
+//      - Missing file   → close the viewer and clean up localStorage.
+//
+// Viewport preservation works in two chained onLayoutReady steps:
+//   1st: the new doc renders at default zoom → we requestZoom(savedZoom).
+//   2nd: the zoom-triggered re-layout settles → we scrollTo(savedOffset).
+// The two steps are needed because zoom changes the document's total size,
+// which would invalidate any scroll position set before it settled.
+//
 let knownGeneration = null;
 
 setInterval(async () => {
@@ -820,15 +845,12 @@ setInterval(async () => {
     if (generation === knownGeneration) return;
     knownGeneration = generation;
 
-    // Refresh folder view
     await navigateTo(currentFolderId);
 
-    // Reload open PDF only if its file changed on disk
     const pdfItemId = localStorage.getItem('rmviewer.pdfItemId');
     if (pdfItemId && currentPdfUrl) {
       const head = await fetch(currentPdfUrl, { method: 'HEAD' });
       if (!head.ok) {
-        // PDF no longer exists — close viewer, clean up
         localStorage.removeItem('rmviewer.pdfItemId');
         localStorage.removeItem('rmviewer.pdfPage');
         currentPdfLastModified = null;
@@ -837,8 +859,26 @@ setInterval(async () => {
         const newLastMod = head.headers.get('Last-Modified');
         if (newLastMod !== currentPdfLastModified) {
           await viewerReady;
-          const page = parseInt(localStorage.getItem('rmviewer.pdfPage') || '1', 10);
-          openPdfViewer(currentPdfUrl, page, null);
+          const savedZoom = zoomPlugin?.getState()?.currentZoomLevel;
+          const savedScroll = scrollPlugin?.getMetrics()?.scrollOffset;
+          // open page 1, and then set scroll to whereer it was
+          openPdfViewer(currentPdfUrl, 1, null);
+          if (savedZoom && savedScroll) {
+            let unsub;
+            unsub = scrollPlugin.onLayoutReady((event) => {
+              if (event.documentId === currentDocId) {
+                if (unsub) unsub();
+                zoomPlugin.forDocument(currentDocId).requestZoom(savedZoom);
+                let unsub2;
+                unsub2 = scrollPlugin.onLayoutReady((event2) => {
+                  if (event2.documentId === currentDocId) {
+                    if (unsub2) unsub2();
+                    viewportPlugin?.forDocument(currentDocId).scrollTo({ ...savedScroll, behavior: 'instant' });
+                  }
+                });
+              }
+            });
+          }
         }
       }
     }
