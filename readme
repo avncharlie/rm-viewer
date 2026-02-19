@@ -7,12 +7,14 @@ $ apt install -y ./google-chrome-stable_current_amd64.deb
 For handwriting recongition, create a file called 'gcv_api_key' with your
 Google Cloud Vision API key in this directory.
 
-
+We have to use the legacy pip resolver to ignore some dependency conflicts that
+aren't actually conflicts.
 $ python3 -m .venv venv
 $ source .venv/bin/activate
+$ pip install --use-deprecated=legacy-resolver -r requirements.txt
 
-to set up sync folder, run:
-$ python3 -m rm_viewer syncd --install
+Now, let's run a test. Set up sync folder (in rm-viewer directory):
+$ python3 -m rm_viewer syncd --install sync
 
 follow instructions to do an initial scp into xochitl-dirty directory, and
 start viewer.
