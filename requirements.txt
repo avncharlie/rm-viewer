@@ -1,3 +1,4 @@
 git+https://github.com/avncharlie/remarks.git
 gunicorn
 xxhash
+requests
