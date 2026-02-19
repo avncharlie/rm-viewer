@@ -397,26 +397,26 @@ def generate_thumbnails(
 
         page = doc[page_idx]
 
-        # Calculate zoom factor to fit page into 384x512
+        # Zoom to fill target width
         page_rect = page.rect
-        zoom_x = target_width / page_rect.width
-        zoom_y = target_height / page_rect.height
-        zoom = min(zoom_x, zoom_y)  # Maintain aspect ratio
-
+        zoom = target_width / page_rect.width
         matrix = fitz.Matrix(zoom, zoom)
-        pix = page.get_pixmap(matrix=matrix)
+        scaled_height = int(page_rect.height * zoom)
 
-        # Create a 384x512 white background and center the thumbnail
-        thumb = fitz.Pixmap(fitz.csRGB, fitz.IRect(0, 0, target_width, target_height), 0)
-        thumb.set_rect(thumb.irect, (255, 255, 255))  # White background
-
-        # Calculate centering offsets
-        x_offset = (target_width - pix.width) // 2
-        y_offset = (target_height - pix.height) // 2
-
-        # Copy the rendered page onto the thumbnail
-        thumb.copy(pix, (x_offset, y_offset))
-        thumb.save(thumbnail_path)
+        if scaled_height >= target_height:
+            # Tall page: fill width, crop from top
+            clip = fitz.IRect(0, 0, target_width, target_height)
+            pix = page.get_pixmap(matrix=matrix, clip=clip)
+            pix.save(thumbnail_path)
+        else:
+            # Short page: fill width, center vertically on white canvas
+            pix = page.get_pixmap(matrix=matrix)
+            thumb = fitz.Pixmap(fitz.csRGB, fitz.IRect(0, 0, target_width, target_height), 0)
+            thumb.set_rect(thumb.irect, (255, 255, 255))
+            y_offset = (target_height - pix.height) // 2
+            pix.set_origin(0, y_offset)
+            thumb.copy(pix, pix.irect)
+            thumb.save(thumbnail_path)
         new_thumbnails_count += 1
 
         log.info(f"Generated thumbnail for page {page_idx}: {thumbnail_path.name}")
@@ -806,12 +806,8 @@ def try_get_name(files: list[Path]):
                 name = metadata.get('visibleName', '')
                 return name
 
-def rm_process(args: argparse.Namespace):
-    xochitl_dir = Path(args.xochitl_dir)
-    output_dir = Path(args.output_dir)
-    ocr_debug = getattr(args, 'ocr_debug', False)
-    no_ocr = getattr(args, 'no_ocr', False)
-
+def run_rm_process(xochitl_dir: Path, output_dir: Path, *, no_ocr=False, ocr_debug=False, no_thumbnails=False):
+    """Core processing logic. Called by both CLI and syncd."""
     old_metadata = None
     old_metadata_f = (output_dir / 'metadata.json')
     if old_metadata_f.exists():
@@ -848,7 +844,7 @@ def rm_process(args: argparse.Namespace):
     for id, files in id_filemap.items():
         old_item = old_items_by_id.get(id)
         try:
-            result, status, stats = parse_item(id, files, output_dir, old_item, api_key=api_key, ocr_debug=ocr_debug, no_thumbnails=args.no_thumbnails)
+            result, status, stats = parse_item(id, files, output_dir, old_item, api_key=api_key, ocr_debug=ocr_debug, no_thumbnails=no_thumbnails)
             if result:
                 full_metadata.append(result)
                 processed_ids.add(id)
@@ -904,3 +900,14 @@ def rm_process(args: argparse.Namespace):
         print(f"  {total_ocr_scans} OCR scans completed ({total_words} words recognised)")
     if errors:
         print(f"  {len(errors)} errors")
+
+
+def rm_process(args: argparse.Namespace):
+    """CLI entry point — unpacks argparse and calls run_rm_process."""
+    run_rm_process(
+        Path(args.xochitl_dir),
+        Path(args.output_dir),
+        no_ocr=getattr(args, 'no_ocr', False),
+        ocr_debug=getattr(args, 'ocr_debug', False),
+        no_thumbnails=getattr(args, 'no_thumbnails', False),
+    )

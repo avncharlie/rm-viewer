@@ -11,6 +11,7 @@ from .utils import setup_logger
 
 from .rm_process import build_process_parser, rm_process
 from .rm_view import build_view_parser, rm_view
+from .syncd import build_syncd_parser, rm_syncd
 
 def parse_args() -> argparse.Namespace:
     """
@@ -27,6 +28,7 @@ def parse_args() -> argparse.Namespace:
                                       required=True)
     build_process_parser(subparser)
     build_view_parser(subparser)
+    build_syncd_parser(subparser)
     args = parser.parse_args()
     return args
 
@@ -40,3 +42,5 @@ if __name__ == "__main__":
     if args.action == 'view':
         rm_view(args)
 
+    if args.action == 'syncd':
+        rm_syncd(args)

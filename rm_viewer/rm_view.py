@@ -33,6 +33,7 @@ def create_app(output_dir: Path) -> Flask:
     app = Flask(__name__, static_folder=STATIC_DIR, static_url_path='')
 
     index = RemarkableIndex(output_dir)
+    generation = 0
 
     # UI
     @app.get("/")
@@ -100,6 +101,17 @@ def create_app(output_dir: Path) -> Flask:
             'query': query,
             'results': results,
         })
+
+    @app.post("/api/rebuild")
+    def api_rebuild():
+        nonlocal index, generation
+        index = RemarkableIndex(output_dir)
+        generation += 1
+        return jsonify({"status": "ok"})
+
+    @app.get("/api/generation")
+    def api_generation():
+        return jsonify({"generation": generation})
 
     @app.get("/api/download/zip")
     def api_download_zip():

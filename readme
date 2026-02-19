@@ -1,0 +1,23 @@
+for ocr, make sure you create a file called 'gcv_api_key' in this directory and
+put in your google cloud vision api key.
+
+to set up sync folder, run:
+$ python3 -m rm_viewer syncd --install
+
+follow instructions to do an initial scp into xochitl-dirty directory, and
+start viewer.
+
+to install on device, copy .rm-viewer template to another folder, and fill in
+relevant fields in config.sh.
+
+then scp onto device to /home/root/.rm-viewer
+then run the following to make root and /etc writeable:
+    umount -R /etc # unmount etc overlay
+    mount -o remount,rw /  # mount system as writeable
+then, in /home/root/.rm-viewer, run:
+    ./install.sh
+
+copy generated ssh key to remote.
+
+then remount root as read only:
+    mount -o remount,ro /

@@ -9,6 +9,9 @@ let scrollPlugin;
 let searchPlugin;
 let uiPlugin;
 let currentPdfUrl;
+let currentPdfLastModified = null;
+let resolveViewerReady;
+const viewerReady = new Promise(r => { resolveViewerReady = r; });
 
 // Set a custom theme to match reMarkable theme
 const viewer = EmbedPDF.init({
@@ -123,6 +126,9 @@ document.getElementById('pdf-viewer').style.display = 'none';
     label: 'Close',
     icon: 'close-x',
     action: () => {
+      localStorage.removeItem('rmviewer.pdfItemId');
+      localStorage.removeItem('rmviewer.pdfPage');
+      currentPdfLastModified = null;
       const el = document.getElementById('pdf-viewer');
       el.classList.add('closing');
       el.addEventListener('transitionend', () => {
@@ -148,6 +154,15 @@ document.getElementById('pdf-viewer').style.display = 'none';
   ui.mergeSchema({
     toolbars: { 'main-toolbar': { ...toolbar, items } }
   });
+
+  // Track page changes to persist current page for reload recovery
+  scrollPlugin.onPageChange((event) => {
+    if (event.documentId === currentDocId) {
+      localStorage.setItem('rmviewer.pdfPage', event.pageNumber);
+    }
+  });
+
+  resolveViewerReady();
 })();
 
 // EmbedPDF also by default hides the pan and pointer button on small screens,
@@ -367,8 +382,18 @@ function openPdfViewer(url, pageNumber, searchQuery) {
   const docId = 'viewer-doc-' + (++viewerDocCounter);
   currentDocId = docId;
   docManager.openDocumentUrl({ url, documentId: docId, autoActivate: true });
+
+  // Persist PDF state for reload recovery
+  const itemIdMatch = url.match(/\/api\/tree\/([^/]+)\/pdf/);
+  if (itemIdMatch) {
+    localStorage.setItem('rmviewer.pdfItemId', itemIdMatch[1]);
+    localStorage.setItem('rmviewer.pdfPage', pageNumber || 1);
+  }
   if (prevDocId) docManager.closeDocument(prevDocId);
   currentPdfUrl = url;
+  fetch(url, { method: 'HEAD' }).then(r => {
+    if (r.ok) currentPdfLastModified = r.headers.get('Last-Modified');
+  }).catch(() => {});
   const el = document.getElementById('pdf-viewer');
   el.style.display = '';
   el.classList.remove('closing');
@@ -439,6 +464,7 @@ async function navigateTo(id) {
   inSearchMode = false;
   currentSearchQuery = '';
   currentFolderId = id;
+  localStorage.setItem('rmviewer.folderId', id);
 
   // Clear search input when navigating
   searchInput.value = '';
@@ -751,5 +777,70 @@ function refreshView() {
   renderDocuments(documentsData);
 }
 
-// Initial load
-navigateTo('root');
+// Initial load — restore saved navigation state or fall back to root
+(async () => {
+  const savedFolder = localStorage.getItem('rmviewer.folderId') || 'root';
+
+  // Validate folder exists via API
+  const folderItem = savedFolder !== 'root' ? await fetchItem(savedFolder) : { id: 'root' };
+  if (folderItem) {
+    await navigateTo(savedFolder);
+  } else {
+    localStorage.removeItem('rmviewer.folderId');
+    await navigateTo('root');
+  }
+
+  // Restore open PDF if any (wait for EmbedPDF viewer to be ready first)
+  const savedPdfId = localStorage.getItem('rmviewer.pdfItemId');
+  if (savedPdfId) {
+    const pdfItem = await fetchItem(savedPdfId);
+    if (pdfItem && pdfItem.type !== 'folder') {
+      await viewerReady;
+      const page = parseInt(localStorage.getItem('rmviewer.pdfPage') || '1', 10);
+      openPdfViewer(`/api/tree/${savedPdfId}/pdf`, page, null);
+    } else {
+      localStorage.removeItem('rmviewer.pdfItemId');
+      localStorage.removeItem('rmviewer.pdfPage');
+    }
+  }
+})();
+
+// Poll for server rebuilds and auto-refresh when detected
+let knownGeneration = null;
+
+setInterval(async () => {
+  try {
+    const res = await fetch('/api/generation');
+    if (!res.ok) return;
+    const { generation } = await res.json();
+    if (knownGeneration === null) {
+      knownGeneration = generation;
+      return;
+    }
+    if (generation === knownGeneration) return;
+    knownGeneration = generation;
+
+    // Refresh folder view
+    await navigateTo(currentFolderId);
+
+    // Reload open PDF only if its file changed on disk
+    const pdfItemId = localStorage.getItem('rmviewer.pdfItemId');
+    if (pdfItemId && currentPdfUrl) {
+      const head = await fetch(currentPdfUrl, { method: 'HEAD' });
+      if (!head.ok) {
+        // PDF no longer exists — close viewer, clean up
+        localStorage.removeItem('rmviewer.pdfItemId');
+        localStorage.removeItem('rmviewer.pdfPage');
+        currentPdfLastModified = null;
+        document.getElementById('pdf-viewer').style.display = 'none';
+      } else {
+        const newLastMod = head.headers.get('Last-Modified');
+        if (newLastMod !== currentPdfLastModified) {
+          await viewerReady;
+          const page = parseInt(localStorage.getItem('rmviewer.pdfPage') || '1', 10);
+          openPdfViewer(currentPdfUrl, page, null);
+        }
+      }
+    }
+  } catch (e) { /* ignore network errors */ }
+}, 5000);

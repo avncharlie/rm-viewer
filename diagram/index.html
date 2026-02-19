@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>rm-viewer Sync Architecture</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #1a1a2e;
+      color: #e0e0e0;
+      margin: 0;
+      padding: 20px 40px;
+    }
+    h1, h2 {
+      color: #c0c0c0;
+      font-weight: 400;
+    }
+    h1 { font-size: 1.4em; margin-bottom: 5px; }
+    h2 { font-size: 1.1em; margin-top: 40px; margin-bottom: 10px; }
+    .diagram-container {
+      background: #16213e;
+      border-radius: 8px;
+      padding: 20px;
+      margin: 15px 0;
+      overflow-x: auto;
+    }
+  </style>
+</head>
+<body>
+
+<h1>rm-viewer Sync Architecture</h1>
+<p style="color:#888; margin-top:0;">Triple-buffer pipeline with syncd reconcile loop</p>
+
+<h2>Happy Path — Full Sync Cycle</h2>
+<div class="diagram-container">
+  <pre class="mermaid">
+sequenceDiagram
+    participant X as xochitl<br/>(device fs)
+    participant S as sync.sh<br/>(device)
+    participant D as xochitl-dirty<br/>(remote)
+    participant SY as syncd<br/>(remote)
+    participant ST as xochitl-staging<br/>(remote)
+    participant XR as xochitl<br/>(remote)
+
+    X->>S: inotify event
+    Note over S: debounce 30s
+    Note over S: flock acquired
+
+    S->>S: SSH: syncflag exists? NO
+    S->>D: rsync (--contimeout=30, --timeout=60)
+
+    S->>D: create syncflag
+    Note over S: release flock
+
+    Note over SY: wakes: syncflag event
+
+    Note over SY: reconcile #1 — stage
+    SY->>SY: syncflag? YES. staging_full? NO
+    D->>ST: rsync dirty → staging
+    SY->>D: delete syncflag
+    Note over SY: staging_full = True
+
+    Note over SY: reconcile #2 — promote + process
+    SY->>SY: staging_full? YES. processing? NO
+    ST->>XR: rsync staging → xochitl
+    SY->>XR: spawn rm-process
+    Note over SY: processing = True<br/>staging_full = False
+
+    Note over SY: reconcile #3 — nothing to do, sleep
+
+    Note over SY: wakes: child exit
+    Note over SY: reconcile — reap
+    SY->>SY: rm-process exited (success)
+    SY->>XR: trigger viewer rebuild
+    Note over SY: processing = False
+  </pre>
+</div>
+
+<h2>Stall Path — rsync Fails, Next Cycle Resumes</h2>
+<div class="diagram-container">
+  <pre class="mermaid">
+sequenceDiagram
+    participant X as xochitl<br/>(device fs)
+    participant S as sync.sh<br/>(device)
+    participant D as xochitl-dirty<br/>(remote)
+
+    X->>S: inotify event
+    Note over S: debounce 30s, flock acquired
+    S->>S: SSH: syncflag exists? NO
+    S->>D: rsync (--contimeout=30, --timeout=60)
+    Note over S,D: connection stalls after 60s inactivity
+    Note over S: rsync fails, no syncflag created
+    Note over S: release flock
+
+    X->>S: new inotify event
+    Note over S: debounce 30s, flock acquired
+    S->>S: SSH: syncflag exists? NO
+    S->>D: rsync (resumes via --partial-dir, completes)
+    S->>D: create syncflag
+    Note over S: release flock
+  </pre>
+</div>
+
+<h2>Blocked Path — Device Skips When syncflag Present</h2>
+<div class="diagram-container">
+  <pre class="mermaid">
+sequenceDiagram
+    participant S as sync.sh<br/>(device)
+    participant D as xochitl-dirty<br/>(remote)
+    participant SY as syncd<br/>(remote)
+
+    Note over S: inotify event, debounce, flock
+    S->>S: SSH: syncflag exists? NO
+    S->>D: rsync (--contimeout=30, --timeout=60)
+
+    S->>D: create syncflag
+    Note over S: release flock
+    Note over SY: syncd wakes, reconcile...
+
+    Note over S: new inotify event, debounce, flock
+    S->>S: SSH: syncflag exists? YES
+    Note over S: skip, release flock
+
+    Note over S: another inotify event, debounce, flock
+    S->>S: SSH: syncflag exists? YES
+    Note over S: skip, release flock
+
+    Note over SY: syncd deletes syncflag
+
+    Note over S: another inotify event, debounce, flock
+    S->>S: SSH: syncflag exists? NO
+    S->>D: rsync (proceeds normally)
+  </pre>
+</div>
+
+<h2>Concurrent — Multiple Syncs During Slow rm-process</h2>
+<div class="diagram-container">
+  <pre class="mermaid">
+sequenceDiagram
+    participant S as sync.sh<br/>(device)
+    participant D as xochitl-dirty<br/>(remote)
+    participant SY as syncd<br/>(remote)
+    participant ST as xochitl-staging<br/>(remote)
+    participant XR as xochitl<br/>(remote)
+
+    Note over XR: rm-process running (slow)
+
+    S->>D: sync #2 completes, create syncflag
+    Note over SY: wakes: syncflag event
+    Note over SY: reconcile — reap: processing, not exited
+    SY->>SY: syncflag? YES. staging_full? NO
+    D->>ST: rsync dirty → staging
+    SY->>D: delete syncflag
+    Note over SY: staging_full = True
+    SY->>SY: staging_full? YES. processing? YES
+    Note over SY: skip promote, sleep
+
+    S->>D: sync #3 completes, create syncflag
+    Note over SY: wakes: syncflag event
+    SY->>SY: syncflag? YES. staging_full? YES
+    Note over SY: skip stage (data sits in dirty), sleep
+
+    Note over XR: rm-process finishes
+    Note over SY: wakes: child exit
+    SY->>SY: reap rm-process (success)
+    SY->>XR: trigger viewer rebuild
+    Note over SY: processing = False
+
+    SY->>SY: staging_full? YES. processing? NO
+    ST->>XR: rsync staging → xochitl
+    SY->>XR: spawn rm-process
+    Note over SY: processing = True, staging_full = False
+
+    SY->>SY: syncflag? YES. staging_full? NO
+    D->>ST: rsync dirty → staging (latest)
+    SY->>D: delete syncflag
+    Note over SY: staging_full = True
+
+    SY->>SY: staging_full? YES. processing? YES
+    Note over SY: skip promote, sleep<br/>(pipeline drains...)
+  </pre>
+</div>
+
+<script src="mermaid.min.js"></script>
+<script>
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: 'dark',
+    sequence: {
+      mirrorActors: false,
+      messageMargin: 30,
+      actorMargin: 30,
+      boxMargin: 10,
+      noteMargin: 10
+    }
+  });
+</script>
+</body>
+</html>
