@@ -147,4 +147,23 @@ def rm_view(args: argparse.Namespace):
     output_dir = Path(args.output_dir)
     app = create_app(output_dir)
     log.info(f"Serving {output_dir} on http://{args.host}:{args.port}")
-    app.run(host=args.host, port=args.port, debug=args.debug)
+    if args.debug:
+        app.run(host=args.host, port=args.port, debug=True)
+    else:
+        from gunicorn.app.base import BaseApplication
+
+        class GunicornApp(BaseApplication):
+            def __init__(self, app, options=None):
+                self.application = app
+                self.options = options or {}
+                super().__init__()
+
+            def load_config(self):
+                for key, value in self.options.items():
+                    self.cfg.set(key.lower(), value)
+
+            def load(self):
+                return self.application
+
+        options = {'bind': f'{args.host}:{args.port}', 'workers': 1, 'accesslog': '-'}
+        GunicornApp(app, options).run()

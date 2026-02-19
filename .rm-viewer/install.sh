@@ -13,8 +13,18 @@ source $DIR/config.sh
 set -e
 
 
+log() { echo "[$(date '+%H:%M:%S')] $*"; }
+
+
 # ----------------------------------------------
-# create systemd service if needed
+# ensure install paths exist
+# ----------------------------------------------
+mkdir -p "$INSTALL_DIR"
+mkdir -p "$LIB_DIR"
+
+
+# ----------------------------------------------
+# install/update systemd service
 # ----------------------------------------------
 _service=$(cat << EOF
 [Unit]
@@ -31,22 +41,30 @@ WantedBy=multi-user.target
 EOF
 )
 
-if [ ! -f /etc/systemd/system/$SERVICE.service ]; then
-  echo "$_service" > /etc/systemd/system/$SERVICE.service
+echo "$_service" > "/etc/systemd/system/$SERVICE.service"
+
+
+# ----------------------------------------------
+# ensure sync ssh key exists (reuse if present)
+# ----------------------------------------------
+if [ -f "$SSH_KEY" ]; then
+    log "reusing existing sync key: $SSH_KEY"
+else
+    log "generating new sync key: $SSH_KEY"
+    dropbearkey -f "$SSH_KEY"
 fi
 
-
-# ----------------------------------------------
-# create sync ssh key
-# ----------------------------------------------
-rm -f $DIR/rm-viewer-sync-key
-rm -f $DIR/rm-viewer-sync-key.pub
-dropbearkey -f $DIR/rm-viewer-sync-key
+# Recreate .pub from private key if missing.
+if [ ! -f "$SSH_KEY.pub" ]; then
+    log "rebuilding missing public key: $SSH_KEY.pub"
+    dropbearkey -y -f "$SSH_KEY" | sed -n 's/^Public key portion is://p;/^ssh-/p' | tail -n 1 > "$SSH_KEY.pub"
+fi
 
 # ----------------------------------------------
 # install service
 # ----------------------------------------------
-systemctl daemon-reload && systemctl enable --now $SERVICE
+systemctl daemon-reload
+systemctl enable --now "$SERVICE"
 
 # ----------------------------------------------
 # epilogue
@@ -54,7 +72,7 @@ systemctl daemon-reload && systemctl enable --now $SERVICE
 echo
 echo "SUCCESS - rm-viewer-sync installed."
 echo
-echo "Make sure to add $DIR/rm-viewer-sync-key.pub to your remote's ssh keys file."
+echo "Make sure to add $SSH_KEY.pub to your remote's ssh keys file."
 echo
 echo "To see logs:"
 echo "   journalctl -fu rm-viewer-sync"

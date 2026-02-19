@@ -1,3 +1,8 @@
+
+install google chrome:
+    curl -LO https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
+    apt install -y ./google-chrome-stable_current_amd64.deb
+
 for ocr, make sure you create a file called 'gcv_api_key' in this directory and
 put in your google cloud vision api key.
 
