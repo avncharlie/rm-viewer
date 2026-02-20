@@ -77,24 +77,63 @@ subsequent processing run is incremental and so should be much quicker.
 $ python3 -m rm_viewer processor sync/xochitl-dirty sync/stable/process_out
 
 Now, start the viewer. You should be able to visit the website and browse your
-files.
+files. I start it on localhost, and then use nginx to proxy to it (and serve on
+https). Serving on https allows the pdf viewer to copy text, http doesn't allow
+this.
 
 $ python3 -m rm_viewer view sync/stable/process_out --host 127.0.0.1 --port 8080
 
 Once you've verified this, now let's install install rm-viewer on the
-reMarkable, so that it automatically syncs changes. 
+reMarkable, so that it automatically syncs changes. Once you're happy with the
+config values in rm-viewer-install, copy the directory to /home/root/.rm-viewer
+on the device.
+$ scp -r rm-viewer-install root@<tablet-ip>:/home/root/.rm-viewer
 
+We will run the sync script manually once, to test it works.
 
+Then, on the device, manually create a ssh key:
+$ cd .rm-viewer
+$ source ./config.sh
+$ dropbearkey -f "$SSH_KEY"
+Then copy the public key (will be in the .pub file of the key just generated)
+and put it in the remote ~/.ssh/authorized_keys files.
 
+Do a test ssh to your remote (ssh -i rm-viewer-sync-key user@remote). Don't
+worry, we will restrict the key to only sync later.
 
-then scp onto device to /home/root/.rm-viewer
-then run the following to make root and /etc writeable:
-    umount -R /etc # unmount etc overlay
-    mount -o remount,rw /  # mount system as writeable
-then, in /home/root/.rm-viewer, run:
-    ./install.sh
+On the remote, make sure the viewer is still running (the rm_viewer view
+command). Then start the rm-viewer sync daemon, on the sync directory and with
+the url of the running viewer. It needs this url as it will hit an endpoint on
+the viewer to reload its index when new processed output is available.
 
-copy generated ssh key to remote.
+$ python3 -m rm_viewer syncd sync --viewer-url http://127.0.0.1:8080
 
-then remount root as read only:
-    mount -o remount,ro /
+Back on the tablet, run ./sync.sh.
+Then make a change on the tablet. You should see it detect the change and do an
+rsync to the remote. You should then see the running syncd pick up the rsync
+and re-process the files. Syncd should then send a request to the viewer to
+rebuild its index. Your open web viewer should then automatically reload and
+show you the change.
+
+If this is all work, kill sync.sh. You may need to kill -9 it and the running
+inotify process.
+
+Now, run these commands to run a persistent systemd service that runs this sync
+script.
+
+First, unmount the etc overlay.
+$ umount -R /etc
+
+Next, mount the system as writeable.
+$ mount -o remount,rw /
+
+Then, run the install.sh.
+$ ./install.sh
+
+Now, remount root as read-only.
+$ mount -o remount,ro /
+
+To see the sync script output, run:
+$ journalctl -fu rm-viewer-sync
+
+Test rebooting your reMarkable and seeing that the syncing works.

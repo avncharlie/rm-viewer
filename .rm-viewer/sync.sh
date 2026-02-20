@@ -53,6 +53,8 @@ attempt_sync() {
             --partial-dir=.rsync-partial \
             --no-compress \
             --delete-delay \
+            --itemize-changes \
+            --out-format='%i %n%L' \
             --exclude='*.thumbnails/***' \
             -e "ssh $SSH_OPTS" \
             --rsync-path="$RSYNC_REMOTE" \
