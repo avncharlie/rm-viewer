@@ -4,7 +4,7 @@ from a web UI.
  - It does handwriting recongition on your handwriting, and creates PDFs with
    overlayed invisible text, allowing you to search and copy your handwriting.
  - It allows you to search all your notes.
- - The viewer works great on a mobile phone.
+ - The viewer is created to look great on a mobile phone.
 
 The following install instructions are tested on python3.12 and python3.14, on
 Ubuntu 24 and macOS.
@@ -71,10 +71,20 @@ generates thumbnails and does OCR, and stores the results in
 sync/stable/process_out. Chrome emits a lot of warnings/errors, but they can be
 ignored.
 
+This may take a while (1hr40 minutes for me), on the first process. Every
+subsequent processing run is incremental and so should be much quicker.
+
 $ python3 -m rm_viewer processor sync/xochitl-dirty sync/stable/process_out
 
-This may take a while (20 minutes for me), on the first process. Every
-subsequent processing run is incremental, and only processes the changes.
+Now, start the viewer. You should be able to visit the website and browse your
+files.
+
+$ python3 -m rm_viewer view sync/stable/process_out --host 127.0.0.1 --port 8080
+
+Once you've verified this, now let's install install rm-viewer on the
+reMarkable, so that it automatically syncs changes. 
+
+
 
 
 then scp onto device to /home/root/.rm-viewer
