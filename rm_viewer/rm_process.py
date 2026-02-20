@@ -396,27 +396,38 @@ def generate_thumbnails(
             continue
 
         page = doc[page_idx]
-
-        # Zoom to fill target width
         page_rect = page.rect
-        zoom = target_width / page_rect.width
-        matrix = fitz.Matrix(zoom, zoom)
-        scaled_height = int(page_rect.height * zoom)
 
-        if scaled_height >= target_height:
-            # Tall page: fill width, crop from top
-            clip = fitz.IRect(0, 0, target_width, target_height)
-            pix = page.get_pixmap(matrix=matrix, clip=clip)
-            pix.save(thumbnail_path)
-        else:
-            # Short page: fill width, center vertically on white canvas
+        if backing_pdf_index is not None:
+            # PDF-backed page: fit entire page within thumbnail, centered
+            zoom = min(target_width / page_rect.width, target_height / page_rect.height)
+            matrix = fitz.Matrix(zoom, zoom)
             pix = page.get_pixmap(matrix=matrix)
             thumb = fitz.Pixmap(fitz.csRGB, fitz.IRect(0, 0, target_width, target_height), 0)
             thumb.set_rect(thumb.irect, (255, 255, 255))
+            x_offset = (target_width - pix.width) // 2
             y_offset = (target_height - pix.height) // 2
-            pix.set_origin(0, y_offset)
+            pix.set_origin(x_offset, y_offset)
             thumb.copy(pix, pix.irect)
             thumb.save(thumbnail_path)
+        else:
+            # No backing PDF: fill width, crop from top if tall
+            zoom = target_width / page_rect.width
+            matrix = fitz.Matrix(zoom, zoom)
+            scaled_height = int(page_rect.height * zoom)
+
+            if scaled_height >= target_height:
+                clip = fitz.IRect(0, 0, target_width, target_height)
+                pix = page.get_pixmap(matrix=matrix, clip=clip)
+                pix.save(thumbnail_path)
+            else:
+                pix = page.get_pixmap(matrix=matrix)
+                thumb = fitz.Pixmap(fitz.csRGB, fitz.IRect(0, 0, target_width, target_height), 0)
+                thumb.set_rect(thumb.irect, (255, 255, 255))
+                y_offset = (target_height - pix.height) // 2
+                pix.set_origin(0, y_offset)
+                thumb.copy(pix, pix.irect)
+                thumb.save(thumbnail_path)
         new_thumbnails_count += 1
 
         log.info(f"Generated thumbnail for page {page_idx}: {thumbnail_path.name}")

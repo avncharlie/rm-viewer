@@ -64,7 +64,18 @@ Then on the remote, run this (indicates to rm-viewer that we have files needing
 to be processed):
 $ touch sync/syncflag
 
-Now, let's do an initial manual process of the files, and test the webUI.
+Now, let's run an initial process of the files, and test the webUI.
+
+This command processes the xochitl directory and buidls a search index,
+generates thumbnails and does OCR, and stores the results in
+sync/stable/process_out. Chrome emits a lot of warnings/errors, but they can be
+ignored.
+
+$ python3 -m rm_viewer processor sync/xochitl-dirty sync/stable/process_out
+
+This may take a while (20 minutes for me), on the first process. Every
+subsequent processing run is incremental, and only processes the changes.
+
 
 then scp onto device to /home/root/.rm-viewer
 then run the following to make root and /etc writeable:
