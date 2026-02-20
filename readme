@@ -182,8 +182,9 @@ substituting the commands you found your sync script runs:
 Test doing a normal ssh into the box, and verify it fails.
 And ensure the sync script still works.
 
-If you use rm-uploader, make sure you add the dirty directory as the remote
-syncing dir:
+If you use rm-uploader (https://github.com/avncharlie/rm-uploader, a web ui to
+add pdfs/epubs onto the tablet), make sure you add the dirty directory as the
+remote syncing dir:
 
 $ rm-upload-menu --rsync /opt/homebrew/bin/rsync \
     --mirror-host user@remote \
