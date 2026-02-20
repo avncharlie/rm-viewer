@@ -137,3 +137,54 @@ To see the sync script output, run:
 $ journalctl -fu rm-viewer-sync
 
 Test rebooting your reMarkable and seeing that the syncing works.
+
+Now, let's set up the ssh lockdown.
+First, lets figure out what command the sync script runs.
+
+On the remote, prepend the following to your key:
+command="/home/bigdog/.ssh/log-cmds.sh" ssh-ed25519 AA....
+And create the log-cmds script. in it, put:
+
+    #!/bin/bash
+    echo "$(date -Iseconds) $SSH_ORIGINAL_COMMAND" >> /home/bigdog/.ssh/commands.log
+    exec /bin/bash -c "$SSH_ORIGINAL_COMMAND"
+
+Now let the script sync, and watch the output of commands.log
+You should see something like:
+2026-02-21T00:08:42+11:00 test -f '/home/bigdog/remarkable/rm-viewer/sync/syncflag'
+2026-02-21T00:08:43+11:00 /usr/bin/rsync --server -logDtpre.iLsfxCIvu --log-format=%i --timeout=60 --delete-delay --partial-dir .rsync-partial . /home/bigdog/remarkable/rm-viewer/sync/xochitl-dirty/
+2026-02-21T00:08:44+11:00 touch '/home/bigdog/remarkable/rm-viewer/sync/syncflag'
+These are commands the sync script runs. 
+
+Now, let's restrict the ssh key to only run those commands. Add something like
+this to your authorized_keys:
+command="/home/bigdog/.ssh/rm-viewer-sync-allowlist.sh",no-pty,no-x11-forwarding,no-agent-forwarding,no-port-forwarding,no-user-rc ssh-ed25519 AA....
+In the rm-viewer-sync-allowlist.sh, put something like the following,
+substituting the commands you found your sync script runs:
+
+    #!/bin/bash
+    case "$SSH_ORIGINAL_COMMAND" in
+        "test -f '/home/bigdog/remarkable/rm-viewer/sync/syncflag'")
+            exec /bin/bash -c "$SSH_ORIGINAL_COMMAND"
+            ;;
+        "/usr/bin/rsync --server -logDtpre.iLsfxCIvu --log-format=%i --timeout=60 --delete-delay --partial-dir .rsync-partial . /home/bigdog/remarkable/rm-viewer/sync/xochitl-dirty/")
+            exec /bin/bash -c "$SSH_ORIGINAL_COMMAND"
+            ;;
+        "touch '/home/bigdog/remarkable/rm-viewer/sync/syncflag'")
+            exec /bin/bash -c "$SSH_ORIGINAL_COMMAND"
+            ;;
+        *)
+            echo "Command not allowed: $SSH_ORIGINAL_COMMAND" >&2
+            exit 1
+            ;;
+    esac
+
+Test doing a normal ssh into the box, and verify it fails.
+And ensure the sync script still works.
+
+If you use rm-uploader, make sure you add the dirty directory as the remote
+syncing dir:
+
+$ rm-upload-menu --rsync /opt/homebrew/bin/rsync \
+    --mirror-host user@remote \
+    --mirror-path /home/bigdog/remarkable/rm-viewer/sync/xochitl-dirty
