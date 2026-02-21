@@ -27,6 +27,8 @@ def build_view_parser(parser: argparse._SubParsersAction):
     )
     view_parser.add_argument("--host", default="127.0.0.1")
     view_parser.add_argument("--port", type=int, default=5000)
+    view_parser.add_argument("--workers", type=int, default=1,
+                             help="Number of gunicorn worker processes (default: 1)")
     view_parser.add_argument("--debug", action="store_true")
 
 def create_app(output_dir: Path) -> Flask:
@@ -165,5 +167,5 @@ def rm_view(args: argparse.Namespace):
             def load(self):
                 return self.application
 
-        options = {'bind': f'{args.host}:{args.port}', 'workers': 1, 'accesslog': '-'}
+        options = {'bind': f'{args.host}:{args.port}', 'workers': args.workers, 'accesslog': '-'}
         GunicornApp(app, options).run()
