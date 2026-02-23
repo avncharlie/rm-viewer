@@ -221,6 +221,9 @@ def build_rm_file_index(
 
     for f in rm_file_dir.rglob('*.rm'):
         page_id = f.stem
+        if page_id not in pages:
+            # Orphaned .rm file (e.g. page was deleted but file remains)
+            continue
         page_index = pages.index(page_id)
         backing_pdf_index = redir_map.get(page_id)
 
