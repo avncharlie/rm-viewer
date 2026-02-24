@@ -406,21 +406,27 @@ function openPdfViewer(url, pageNumber, searchQuery) {
   // opening at searchQuery takes precedence over opening at pageNumber
   const needsSearch = searchQuery && searchPlugin && uiPlugin;
   const needsScroll = !needsSearch && pageNumber && pageNumber > 1 && scrollPlugin;
-  if (needsScroll || needsSearch) {
-    let unsubscribe;
-    unsubscribe = scrollPlugin.onLayoutReady((event) => {
-      if (event.documentId === docId) {
-        if (needsSearch) {
-          uiPlugin.forDocument(docId).toggleSidebar('right', 'main', 'search-panel');
-          searchPlugin.forDocument(docId).searchAllPages(searchQuery);
+  // Always fit-to-page on initial open, then scroll to the right page
+  let unsub1;
+  unsub1 = scrollPlugin.onLayoutReady((event) => {
+    if (event.documentId === docId) {
+      if (unsub1) unsub1();
+      zoomPlugin.forDocument(docId).requestZoom('fit-width');
+      let unsub2;
+      unsub2 = scrollPlugin.onLayoutReady((event2) => {
+        if (event2.documentId === docId) {
+          if (unsub2) unsub2();
+          if (needsSearch) {
+            uiPlugin.forDocument(docId).toggleSidebar('right', 'main', 'search-panel');
+            searchPlugin.forDocument(docId).searchAllPages(searchQuery);
+          }
+          if (needsScroll) {
+            scrollPlugin.forDocument(docId).scrollToPage({ pageNumber, behavior: 'instant' });
+          }
         }
-        if (needsScroll) {
-          scrollPlugin.forDocument(docId).scrollToPage({ pageNumber, behavior: 'instant' });
-        }
-        if (unsubscribe) unsubscribe();
-      }
-    });
-  }
+      });
+    }
+  });
 }
 
 // Breadcrumbs

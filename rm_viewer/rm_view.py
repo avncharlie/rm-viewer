@@ -86,7 +86,9 @@ def create_app(output_dir: Path) -> Flask:
         thumb_path = index.output_dir / thumb_info['thumbnail_path']
         if not thumb_path.exists():
             return 'Not found', 404
-        return send_from_directory(str(thumb_path.parent), thumb_path.name)
+        resp = send_from_directory(str(thumb_path.parent), thumb_path.name)
+        resp.headers['Cache-Control'] = 'no-cache'
+        return resp
 
     @app.get("/api/tree/<item_id>")
     def api_item(item_id):
