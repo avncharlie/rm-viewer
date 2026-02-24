@@ -229,6 +229,12 @@ async function searchDocuments(query) {
 //   FILE BROWSER
 // ---------------------------------------------------------------------------
 
+function formatFileSize(bytes) {
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1024 * 1024) return Math.round(bytes / 1024) + ' KB';
+  return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+}
+
 // currently viewed folders and documents
 let foldersData = [];
 let documentsData = [];
@@ -333,7 +339,9 @@ function renderDocuments(documents) {
     div.className = 'document';
 
     let secondaryText;
-    if (inSearchMode && doc.hits != null) {
+    if (currentSort.field === 'size' && !inSearchMode) {
+      secondaryText = `<span>${formatFileSize(doc.pdfSize || 0)}</span>`;
+    } else if (inSearchMode && doc.hits != null) {
       if (doc.hits === 0 && doc.titleMatch) {
         secondaryText = `<span>Title match</span>`;
       } else {
@@ -406,27 +414,46 @@ function openPdfViewer(url, pageNumber, searchQuery) {
   // opening at searchQuery takes precedence over opening at pageNumber
   const needsSearch = searchQuery && searchPlugin && uiPlugin;
   const needsScroll = !needsSearch && pageNumber && pageNumber > 1 && scrollPlugin;
-  // Always fit-to-page on initial open, then scroll to the right page
-  let unsub1;
-  unsub1 = scrollPlugin.onLayoutReady((event) => {
-    if (event.documentId === docId) {
-      if (unsub1) unsub1();
-      zoomPlugin.forDocument(docId).requestZoom('fit-width');
-      let unsub2;
-      unsub2 = scrollPlugin.onLayoutReady((event2) => {
-        if (event2.documentId === docId) {
-          if (unsub2) unsub2();
-          if (needsSearch) {
-            uiPlugin.forDocument(docId).toggleSidebar('right', 'main', 'search-panel');
-            searchPlugin.forDocument(docId).searchAllPages(searchQuery);
+  const isMobile = window.matchMedia('(max-width: 600px)').matches;
+
+  if (isMobile && zoomPlugin) {
+    // Mobile: fit-width zoom, then scroll/search after re-layout settles
+    let unsub1;
+    unsub1 = scrollPlugin.onLayoutReady((event) => {
+      if (event.documentId === docId) {
+        if (unsub1) unsub1();
+        zoomPlugin.forDocument(docId).requestZoom('fit-width');
+        let unsub2;
+        unsub2 = scrollPlugin.onLayoutReady((event2) => {
+          if (event2.documentId === docId) {
+            if (unsub2) unsub2();
+            if (needsSearch) {
+              uiPlugin.forDocument(docId).toggleSidebar('right', 'main', 'search-panel');
+              searchPlugin.forDocument(docId).searchAllPages(searchQuery);
+            }
+            if (needsScroll) {
+              scrollPlugin.forDocument(docId).scrollToPage({ pageNumber, behavior: 'instant' });
+            }
           }
-          if (needsScroll) {
-            scrollPlugin.forDocument(docId).scrollToPage({ pageNumber, behavior: 'instant' });
-          }
+        });
+      }
+    });
+  } else if (needsScroll || needsSearch) {
+    // Desktop: default zoom, just scroll to page / open search
+    let unsubscribe;
+    unsubscribe = scrollPlugin.onLayoutReady((event) => {
+      if (event.documentId === docId) {
+        if (needsSearch) {
+          uiPlugin.forDocument(docId).toggleSidebar('right', 'main', 'search-panel');
+          searchPlugin.forDocument(docId).searchAllPages(searchQuery);
         }
-      });
-    }
-  });
+        if (needsScroll) {
+          scrollPlugin.forDocument(docId).scrollToPage({ pageNumber, behavior: 'instant' });
+        }
+        if (unsubscribe) unsubscribe();
+      }
+    });
+  }
 }
 
 // Breadcrumbs
