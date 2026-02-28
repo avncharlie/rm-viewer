@@ -419,13 +419,17 @@ function openPdfViewer(url, pageNumber, searchQuery) {
   if (isMobile && zoomPlugin) {
     // Mobile: fit-width zoom, then scroll/search after re-layout settles
     let unsub1;
+    let handled1 = false;
     unsub1 = scrollPlugin.onLayoutReady((event) => {
-      if (event.documentId === docId) {
+      if (event.documentId === docId && !handled1) {
+        handled1 = true;
         if (unsub1) unsub1();
         zoomPlugin.forDocument(docId).requestZoom('fit-width');
         let unsub2;
+        let handled2 = false;
         unsub2 = scrollPlugin.onLayoutReady((event2) => {
-          if (event2.documentId === docId) {
+          if (event2.documentId === docId && !handled2) {
+            handled2 = true;
             if (unsub2) unsub2();
             if (needsSearch) {
               uiPlugin.forDocument(docId).toggleSidebar('right', 'main', 'search-panel');
