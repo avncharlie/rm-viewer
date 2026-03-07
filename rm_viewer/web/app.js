@@ -327,6 +327,58 @@ function renderFolders(folders) {
   });
 }
 
+// Long-press handler: shows file size on press-and-hold
+function attachLongPress(btn) {
+  let pressTimer = null;
+  let didLongPress = false;
+  let startX, startY;
+  const LONG_PRESS_MS = 400;
+  const MOVE_THRESHOLD = 10;
+
+  btn.addEventListener('pointerdown', (e) => {
+    if (e.button !== 0) return;
+    didLongPress = false;
+    startX = e.clientX;
+    startY = e.clientY;
+    pressTimer = setTimeout(() => {
+      didLongPress = true;
+      btn.classList.add('longpress');
+    }, LONG_PRESS_MS);
+  });
+
+  btn.addEventListener('pointermove', (e) => {
+    if (!pressTimer) return;
+    const dx = e.clientX - startX;
+    const dy = e.clientY - startY;
+    if (dx * dx + dy * dy > MOVE_THRESHOLD * MOVE_THRESHOLD) {
+      clearTimeout(pressTimer);
+      pressTimer = null;
+    }
+  });
+
+  const cancelPress = () => {
+    if (pressTimer) {
+      clearTimeout(pressTimer);
+      pressTimer = null;
+    }
+    btn.classList.remove('longpress');
+  };
+
+  btn.addEventListener('pointerup', cancelPress);
+  btn.addEventListener('pointercancel', cancelPress);
+  btn.addEventListener('pointerleave', cancelPress);
+
+  btn.addEventListener('click', (e) => {
+    if (didLongPress) {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      didLongPress = false;
+    }
+  }, true);
+
+  btn.addEventListener('contextmenu', (e) => e.preventDefault());
+}
+
 // Create html for each document
 function renderDocuments(documents) {
   const grid = document.getElementById('document_grid');
@@ -339,23 +391,30 @@ function renderDocuments(documents) {
     div.className = 'document';
 
     let secondaryText;
+    const fileSizeText = formatFileSize(doc.pdfSize || 0);
+
     if (currentSort.field === 'size' && !inSearchMode) {
-      secondaryText = `<span>${formatFileSize(doc.pdfSize || 0)}</span>`;
+      secondaryText = `
+        <span class="doc_text2_default">${fileSizeText}</span>
+        <span class="doc_text2_press">${fileSizeText}</span>`;
     } else if (inSearchMode && doc.hits != null) {
-      if (doc.hits === 0 && doc.titleMatch) {
-        secondaryText = `<span>Title match</span>`;
-      } else {
-        secondaryText = `<span>${doc.hits} result${doc.hits !== 1 ? 's' : ''}</span>`;
-      }
+      const hitsText = (doc.hits === 0 && doc.titleMatch)
+        ? 'Title match'
+        : `${doc.hits} result${doc.hits !== 1 ? 's' : ''}`;
+      secondaryText = `
+        <span class="doc_text2_default">${hitsText}</span>
+        <span class="doc_text2_press">${fileSizeText}</span>`;
     } else if (doc.type === 'epub') {
       // on hover, books show percent read
       const percent = Math.round((doc.currentPage / doc.pageCount) * 100);
       secondaryText = `
         <span class="doc_text2_default">Page ${doc.currentPage} of ${doc.pageCount}</span>
         <span class="doc_text2_hover">${percent}% read</span>
-      `;
+        <span class="doc_text2_press">${fileSizeText}</span>`;
     } else {
-      secondaryText = `<span>Page ${doc.currentPage} of ${doc.pageCount}</span>`;
+      secondaryText = `
+        <span class="doc_text2_default">Page ${doc.currentPage} of ${doc.pageCount}</span>
+        <span class="doc_text2_press">${fileSizeText}</span>`;
     }
 
     // In search mode, use thumbnail of the first matched page if available
@@ -382,6 +441,7 @@ function renderDocuments(documents) {
       <div class='doc_text2'>${secondaryText}</div>
     `;
     div.style.cursor = 'pointer';
+    attachLongPress(div);
     div.addEventListener('click', () => openPdfViewer(pdfUrl, openPage, openSearch));
     grid.appendChild(div);
   });

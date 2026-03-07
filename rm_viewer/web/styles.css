@@ -223,13 +223,38 @@ html, body {
 }
 
 @media (hover: hover) {
-  .document:hover .doc_text2_default {
+  .document:hover .doc_text2:has(.doc_text2_hover) .doc_text2_default {
     opacity: 0;
   }
 
   .document:hover .doc_text2_hover {
     opacity: 1;
   }
+}
+
+/* Long-press file size text */
+.doc_text2_press {
+  position: absolute;
+  left: 0;
+  opacity: 0;
+  transition: opacity 0.1s ease;
+}
+
+.list_view .doc_text2_press {
+  left: auto;
+  right: 0;
+}
+
+.document.longpress .doc_text2_default {
+  opacity: 0;
+}
+
+.document.longpress .doc_text2_hover {
+  opacity: 0;
+}
+
+.document.longpress .doc_text2_press {
+  opacity: 1;
 }
 
 .thumbnail img {
