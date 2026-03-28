@@ -946,13 +946,23 @@ setInterval(async () => {
 
     const pdfItemId = localStorage.getItem('rmviewer.pdfItemId');
     if (pdfItemId && currentPdfUrl) {
-      const head = await fetch(currentPdfUrl, { method: 'HEAD' });
+      let head = await fetch(currentPdfUrl, { method: 'HEAD' });
       if (!head.ok) {
-        localStorage.removeItem('rmviewer.pdfItemId');
-        localStorage.removeItem('rmviewer.pdfPage');
-        currentPdfLastModified = null;
-        document.getElementById('pdf-viewer').style.display = 'none';
-      } else {
+        // PDF may be mid-regeneration — only close viewer if the item
+        // itself is gone from the index (i.e. truly deleted).
+        const itemRes = await fetch(`/api/tree/${pdfItemId}`);
+        if (!itemRes.ok) {
+          localStorage.removeItem('rmviewer.pdfItemId');
+          localStorage.removeItem('rmviewer.pdfPage');
+          currentPdfLastModified = null;
+          document.getElementById('pdf-viewer').style.display = 'none';
+        } else {
+          // Item exists but PDF not ready yet — retry once after a delay.
+          await new Promise(r => setTimeout(r, 2000));
+          head = await fetch(currentPdfUrl, { method: 'HEAD' });
+        }
+      }
+      if (head.ok) {
         const newLastMod = head.headers.get('Last-Modified');
         if (newLastMod !== currentPdfLastModified) {
           await viewerReady;
