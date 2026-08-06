@@ -1,19 +1,30 @@
+# rm-viewer
+
+<img width="35%" alt="image" src="https://github.com/user-attachments/assets/79d93721-7b29-4539-a195-8d643b78e5e4" />
+
 rm-viewer is a software to sync the contents of your reMarkable and view it
 from a web UI.
+
  - It automatically syncs changes from your reMarkable as you use it.
  - It does handwriting recongition on your handwriting, and creates PDFs with
    overlayed invisible text, allowing you to search and copy your handwriting.
  - It allows you to search all your notes.
  - The viewer is created to look great on a mobile phone.
 
+<img width="75%" alt="image" src="https://github.com/user-attachments/assets/0a6f0503-e16e-4556-8eb8-4e9bfd710286" />
+
+
+
 The following install instructions are tested on python3.12 and python3.14, on
 Ubuntu 24 and macOS.
 
-Install rsync.
+Install `rsync`.
 
 Install google chrome:
+```sh
 $ curl -LO https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
 $ apt install -y ./google-chrome-stable_current_amd64.deb
+```
 
 For handwriting recongition, create a file called 'gcv_api_key' with your
 Google Cloud Vision API key in this directory.
@@ -21,16 +32,22 @@ Use the scripts in debug/ to test your key and make sure it works.
 
 We have to use the legacy pip resolver to ignore some dependency conflicts that
 aren't actually conflicts while installing rm-viewer.
+```sh
 $ python3 -m .venv venv
 $ source .venv/bin/activate
 $ pip install --use-deprecated=legacy-resolver -r requirements.txt
+```
 
 Set up sync folder (in rm-viewer directory):
+```sh
 $ python3 -m rm_viewer syncd --install sync
+```
 Note down the value it says to set SYNC_DIR to.
 
 Copy the device installation template directory
+```sh
 $ cp -r .rm-viewer rm-viewer-install
+```
 In the new folder (rm-viewer-install), fill in config.sh. You may want to set:
   - REMOTE_USER and REMOTE_HOST (current user and hostname/ip)
   - SYNC_DIR (full path of sync folder)
@@ -45,6 +62,7 @@ files are stores) to the sync directory. Probably best to do this over the usb
 connection.
 
 ssh into your reMarkable and run:
+```sh
 $ rsync -av \
     --partial-dir .rsync-partial \
     --no-compress \
@@ -55,14 +73,19 @@ $ rsync -av \
     -e 'ssh -i /home/root/key' \
     /home/root/.local/share/remarkable/xochitl/ \
     user@remote:/home/bigdog/remarkable/rm-viewer/sync/xochitl-dirty/
+```
 If you want to create an ssh key, run:
+```sh
 $ dropbearkey -f /home/root/key
+```
 Delete the key afterwards as we will set up another one as part of the
 installation on the device.
 
 Then on the remote, run this (indicates to rm-viewer that we have files needing
 to be processed):
+```sh
 $ touch sync/syncflag
+```
 
 Now, let's run an initial process of the files, and test the webUI.
 
@@ -74,31 +97,39 @@ ignored.
 This may take a while (1hr40 minutes for me), on the first process. Every
 subsequent processing run is incremental and so should be much quicker.
 
+```sh
 $ python3 -m rm_viewer processor sync/xochitl-dirty sync/stable/process_out
+```
 
 Now, start the viewer. You should be able to visit the website and browse your
 files. I start it on localhost, and then use nginx to proxy to it (and serve on
 https). Serving on https allows the pdf viewer to copy text, http doesn't allow
 this.
 
+```sh
 $ python3 -m rm_viewer view sync/stable/process_out --host 127.0.0.1 --port 8080
+```
 
 Once you've verified this, now let's install install rm-viewer on the
 reMarkable, so that it automatically syncs changes. Once you're happy with the
-config values in rm-viewer-install, copy the directory to /home/root/.rm-viewer
+config values in rm-viewer-install, copy the directory to `/home/root/.rm-viewer`
 on the device.
+```sh
 $ scp -r rm-viewer-install root@<tablet-ip>:/home/root/.rm-viewer
+```
 
 We will run the sync script manually once, to test it works.
 
 Then, on the device, manually create a ssh key:
+```sh
 $ cd .rm-viewer
 $ source ./config.sh
 $ dropbearkey -f "$SSH_KEY"
+```
 Then copy the public key (will be in the .pub file of the key just generated)
-and put it in the remote ~/.ssh/authorized_keys files.
+and put it in the remote `~/.ssh/authorized_keys` files.
 
-Do a test ssh to your remote (ssh -i rm-viewer-sync-key user@remote). Don't
+Do a test ssh to your remote (`ssh -i rm-viewer-sync-key user@remote`). Don't
 worry, we will restrict the key to only sync later.
 
 On the remote, make sure the viewer is still running (the rm_viewer view
@@ -106,9 +137,11 @@ command). Then start the rm-viewer sync daemon, on the sync directory and with
 the url of the running viewer. It needs this url as it will hit an endpoint on
 the viewer to reload its index when new processed output is available.
 
+```sh
 $ python3 -m rm_viewer syncd sync --viewer-url http://127.0.0.1:8080
+```
 
-Back on the tablet, run ./sync.sh.
+Back on the tablet, run `./sync.sh.`
 Then make a change on the tablet. You should see it detect the change and do an
 rsync to the remote. You should then see the running syncd pick up the rsync
 and re-process the files. Syncd should then send a request to the viewer to
@@ -122,19 +155,29 @@ Now, run these commands to run a persistent systemd service that runs this sync
 script.
 
 First, unmount the etc overlay.
+```sh
 $ umount -R /etc
+```
 
 Next, mount the system as writeable.
+```sh
 $ mount -o remount,rw /
+```
 
 Then, run the install.sh.
+```sh
 $ ./install.sh
+```
 
 Now, remount root as read-only.
+```sh
 $ mount -o remount,ro /
+```
 
 To see the sync script output, run:
+```sh
 $ journalctl -fu rm-viewer-sync
+```
 
 Test rebooting your reMarkable and seeing that the syncing works.
 
@@ -151,9 +194,11 @@ And create the log-cmds script. in it, put:
 
 Now let the script sync, and watch the output of commands.log
 You should see something like:
+```
 2026-02-21T00:08:42+11:00 test -f '/home/bigdog/remarkable/rm-viewer/sync/syncflag'
 2026-02-21T00:08:43+11:00 /usr/bin/rsync --server -logDtpre.iLsfxCIvu --log-format=%i --timeout=60 --delete-delay --partial-dir .rsync-partial . /home/bigdog/remarkable/rm-viewer/sync/xochitl-dirty/
 2026-02-21T00:08:44+11:00 touch '/home/bigdog/remarkable/rm-viewer/sync/syncflag'
+```
 These are commands the sync script runs. 
 
 Now, let's restrict the ssh key to only run those commands. Add something like
@@ -162,22 +207,24 @@ command="/home/bigdog/.ssh/rm-viewer-sync-allowlist.sh",no-pty,no-x11-forwarding
 In the rm-viewer-sync-allowlist.sh, put something like the following,
 substituting the commands you found your sync script runs:
 
-    #!/bin/bash
-    case "$SSH_ORIGINAL_COMMAND" in
-        "test -f '/home/bigdog/remarkable/rm-viewer/sync/syncflag'")
-            exec /bin/bash -c "$SSH_ORIGINAL_COMMAND"
-            ;;
-        "/usr/bin/rsync --server -logDtpre.iLsfxCIvu --log-format=%i --timeout=60 --delete-delay --partial-dir .rsync-partial . /home/bigdog/remarkable/rm-viewer/sync/xochitl-dirty/")
-            exec /bin/bash -c "$SSH_ORIGINAL_COMMAND"
-            ;;
-        "touch '/home/bigdog/remarkable/rm-viewer/sync/syncflag'")
-            exec /bin/bash -c "$SSH_ORIGINAL_COMMAND"
-            ;;
-        *)
-            echo "Command not allowed: $SSH_ORIGINAL_COMMAND" >&2
-            exit 1
-            ;;
-    esac
+```bash
+#!/bin/bash
+case "$SSH_ORIGINAL_COMMAND" in
+    "test -f '/home/bigdog/remarkable/rm-viewer/sync/syncflag'")
+        exec /bin/bash -c "$SSH_ORIGINAL_COMMAND"
+        ;;
+    "/usr/bin/rsync --server -logDtpre.iLsfxCIvu --log-format=%i --timeout=60 --delete-delay --partial-dir .rsync-partial . /home/bigdog/remarkable/rm-viewer/sync/xochitl-dirty/")
+        exec /bin/bash -c "$SSH_ORIGINAL_COMMAND"
+        ;;
+    "touch '/home/bigdog/remarkable/rm-viewer/sync/syncflag'")
+        exec /bin/bash -c "$SSH_ORIGINAL_COMMAND"
+        ;;
+    *)
+        echo "Command not allowed: $SSH_ORIGINAL_COMMAND" >&2
+        exit 1
+        ;;
+esac
+```
 
 Test doing a normal ssh into the box, and verify it fails.
 And ensure the sync script still works.
@@ -186,6 +233,8 @@ If you use rm-uploader (https://github.com/avncharlie/rm-uploader, a web ui to
 add pdfs/epubs onto the tablet), make sure you add the dirty directory as the
 remote syncing dir:
 
+```sh
 $ rm-upload-menu --rsync /opt/homebrew/bin/rsync \
     --mirror-host user@remote \
     --mirror-path /home/bigdog/remarkable/rm-viewer/sync/xochitl-dirty
+```
