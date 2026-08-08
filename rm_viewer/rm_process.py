@@ -12,6 +12,7 @@ from pathlib import Path
 import fitz
 import xxhash
 from remarks import run_remarks
+from remarks.utils import read_meta_file
 from rmc.exporters.svg import set_device, set_dimensions_for_pdf
 from rmc.exporters.pdf import rm_to_svg, chrome_svg_to_pdf
 
@@ -578,6 +579,35 @@ def build_search_index(
     log.info(f"Created search index: {len(backing_pages)} backing pages, {len(ocr_pages)} OCR pages")
 
 
+def validate_book_output(item: dict, output_dir: Path, check_thumbnails: bool = True) -> str | None:
+    """Check a book's processed output is consistent with its metadata.
+
+    Returns None if valid, otherwise a string describing the problem.
+    """
+    total_pages = item.get('total_pages', 0)
+
+    output_pdf = output_dir / item.get('output_pdf', '')
+    if not output_pdf.exists():
+        return f'output pdf missing: {output_pdf}'
+    try:
+        with fitz.open(output_pdf) as doc:
+            pdf_pages = len(doc)
+    except Exception as e:
+        return f'output pdf unreadable: {e}'
+    if pdf_pages != total_pages:
+        return f'output pdf has {pdf_pages} pages, expected {total_pages}'
+
+    thumbnail_pages = item.get('thumbnail_pages', [])
+    if check_thumbnails:
+        if len(thumbnail_pages) != total_pages:
+            return f'{len(thumbnail_pages)} thumbnails recorded, expected {total_pages}'
+        for tp in thumbnail_pages:
+            if not (output_dir / tp['thumbnail_path']).exists():
+                return f'thumbnail file missing: {tp["thumbnail_path"]}'
+
+    return None
+
+
 def parse_item(
     id: str,
     files: list[Path],
@@ -670,13 +700,21 @@ def parse_item(
                 log.info(f'Renaming "{old_name}" to "{name}"')
                 old_dir.rename(new_dir)
 
-        # If hash unchanged, return old metadata (with updated name/parent)
+        # If hash unchanged, return old metadata (with updated name/parent) —
+        # but only if the cached output actually matches it. A previous run may
+        # have recorded the current source hash alongside broken output (e.g.
+        # a truncated PDF), which would otherwise never be reprocessed.
         if source_hash == old_hash and cached_dir_exists:
-            log.info(f'Unchanged: {name}')
-            result = old_item.copy()
-            result['name'] = name
-            result['parent'] = parent
-            return result, 'unchanged', {}
+            problem = validate_book_output(
+                old_item, output_dir, check_thumbnails=not no_thumbnails
+            )
+            if problem is None:
+                log.info(f'Unchanged: {name}')
+                result = old_item.copy()
+                result['name'] = name
+                result['parent'] = parent
+                return result, 'unchanged', {}
+            log.warning(f'Cached output for "{name}" is invalid ({problem}), reprocessing')
 
     # Hash changed or new item - do full processing
     log.info(f'Processing item: {name}')
@@ -722,6 +760,17 @@ def parse_item(
         if not expected_pdf.exists():
             raise RuntimeError(f'Remarks produced no output for item "{name}"')
         shutil.copy2(expected_pdf, output_pdf)
+
+    # Refuse to record output that doesn't cover every page: a short PDF here
+    # would poison the cache (source hash gets stored against broken output)
+    # and silently drop thumbnails for the missing pages.
+    with fitz.open(output_pdf) as check_doc:
+        remarks_page_count = len(check_doc)
+    if remarks_page_count != len(pages):
+        raise RuntimeError(
+            f'Remarks output for "{name}" has {remarks_page_count} pages, '
+            f'expected {len(pages)}'
+        )
 
     # Get backing PDF
     backing_pdf = None
@@ -822,6 +871,12 @@ def try_get_name(files: list[Path]):
 
 def run_rm_process(xochitl_dir: Path, output_dir: Path, *, no_ocr=False, ocr_debug=False, no_thumbnails=False):
     """Core processing logic. Called by both CLI and syncd."""
+    # remarks memoizes .metadata/.content reads by file path (@cache on
+    # read_meta_file). syncd calls this repeatedly in one long-lived process
+    # and parse_item re-copies changed sources to the same paths, so without
+    # clearing this, remarks processes stale page lists from previous runs.
+    read_meta_file.cache_clear()
+
     old_metadata = None
     old_metadata_f = (output_dir / 'metadata.json')
     if old_metadata_f.exists():
