@@ -30,12 +30,10 @@ For handwriting recongition, create a file called 'gcv_api_key' with your
 Google Cloud Vision API key in this directory.
 Use the scripts in debug/ to test your key and make sure it works.
 
-We have to use the legacy pip resolver to ignore some dependency conflicts that
-aren't actually conflicts while installing rm-viewer.
 ```sh
 $ python3 -m .venv venv
 $ source .venv/bin/activate
-$ pip install --use-deprecated=legacy-resolver -r requirements.txt
+$ pip install -r requirements.txt
 ```
 
 Set up sync folder (in rm-viewer directory):
