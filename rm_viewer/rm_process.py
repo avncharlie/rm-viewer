@@ -12,7 +12,7 @@ from pathlib import Path
 import fitz
 import xxhash
 from remarks import run_remarks
-from remarks.utils import read_meta_file
+from remarks.utils import read_meta_file, sanitize_filename
 from rmc.exporters.svg import set_device, set_dimensions_for_pdf
 from rmc.exporters.pdf import rm_to_svg, chrome_svg_to_pdf
 
@@ -682,7 +682,14 @@ def parse_item(
             'parent': parent
         }, status, {}
 
-    nb_output_dir = output_dir / f'{name} - {id}'
+    # A visibleName may contain characters that are not safe in a path, most
+    # notably "/" (e.g. a date like 25/09/2026), which would be read as a
+    # directory separator. remarks sanitizes the same way for its own output,
+    # so both sides agree on the filename. The raw name is kept for display
+    # and metadata.
+    safe_name = sanitize_filename(name)
+
+    nb_output_dir = output_dir / f'{safe_name} - {id}'
     cached_dir_exists = nb_output_dir.exists()
 
     # For books: compute source hash and check against old
@@ -694,8 +701,8 @@ def parse_item(
 
         # Handle rename: if name changed, rename the output directory
         if old_name and old_name != name:
-            old_dir = output_dir / f'{old_name} - {id}'
-            new_dir = output_dir / f'{name} - {id}'
+            old_dir = output_dir / f'{sanitize_filename(old_name)} - {id}'
+            new_dir = output_dir / f'{safe_name} - {id}'
             if old_dir.exists():
                 log.info(f'Renaming "{old_name}" to "{name}"')
                 old_dir.rename(new_dir)
@@ -752,11 +759,11 @@ def parse_item(
             shutil.copy(file, nb_xochitl_dir)
 
     # Run remarks in temp directory
-    output_pdf = nb_output_dir / f'{name}.pdf'
+    output_pdf = nb_output_dir / f'{safe_name}.pdf'
     with tempfile.TemporaryDirectory() as tmp_dir:
         remarks_out = Path(tmp_dir) / 'remarks_out'
         run_remarks(nb_xochitl_dir, remarks_out)
-        expected_pdf = remarks_out / f'{name} _remarks.pdf'
+        expected_pdf = remarks_out / f'{safe_name} _remarks.pdf'
         if not expected_pdf.exists():
             raise RuntimeError(f'Remarks produced no output for item "{name}"')
         shutil.copy2(expected_pdf, output_pdf)
