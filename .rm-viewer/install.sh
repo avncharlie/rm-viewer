@@ -17,6 +17,31 @@ log() { echo "[$(date '+%H:%M:%S')] $*"; }
 
 
 # ----------------------------------------------
+# make the rootfs writeable
+#
+# /etc is an overlay mount and / is read-only, so the service file below
+# cannot be written until both are dealt with. Root is put back to read-only
+# on the way out, including when something fails part way through.
+# ----------------------------------------------
+_root_was_remounted=0
+
+restore_root() {
+    if [ "$_root_was_remounted" = "1" ]; then
+        log "remounting / read-only"
+        mount -o remount,ro / || log "WARNING: could not remount / read-only"
+    fi
+}
+trap restore_root EXIT
+
+log "unmounting /etc overlay"
+umount -R /etc || log "/etc overlay not mounted, continuing"
+
+log "remounting / read-write"
+mount -o remount,rw /
+_root_was_remounted=1
+
+
+# ----------------------------------------------
 # ensure install paths exist
 # ----------------------------------------------
 mkdir -p "$INSTALL_DIR"
@@ -65,6 +90,8 @@ systemctl enable --now "$SERVICE"
 # ----------------------------------------------
 echo
 echo "SUCCESS - rm-viewer-sync installed."
+echo
+echo "/ will be remounted read-only as this script exits."
 echo
 echo "Make sure to add $SSH_KEY.pub to your remote's ssh keys file."
 echo

@@ -152,25 +152,14 @@ inotify process.
 Now, run these commands to run a persistent systemd service that runs this sync
 script.
 
-First, unmount the etc overlay.
-```sh
-$ umount -R /etc
-```
-
-Next, mount the system as writeable.
-```sh
-$ mount -o remount,rw /
-```
-
-Then, run the install.sh.
+Run the install.sh.
 ```sh
 $ ./install.sh
 ```
 
-Now, remount root as read-only.
-```sh
-$ mount -o remount,ro /
-```
+It unmounts the `/etc` overlay and remounts `/` read-write on the way in, then
+puts `/` back to read-only as it exits — including if the install fails part
+way through — so there is nothing to run by hand around it.
 
 To see the sync script output, run:
 ```sh
