@@ -104,6 +104,15 @@ document.getElementById('pdf-viewer').style.display = 'none';
   const schema = ui.getSchema();
   const toolbar = schema.toolbars['main-toolbar'];
   const items = JSON.parse(JSON.stringify(toolbar.items));
+  // Keep pan/pointer available at every screen size. Configure this before
+  // rendering: the toolbar only exists once a document is opened, which may
+  // happen long after startup (so a timed DOM/CSS override can miss it).
+  const responsive = JSON.parse(JSON.stringify(toolbar.responsive));
+  for (const breakpoint of Object.values(responsive.breakpoints)) {
+    if (breakpoint.hide) {
+      breakpoint.hide = breakpoint.hide.filter(id => id !== 'pan-button' && id !== 'pointer-button');
+    }
+  }
   const leftGroup = items.find(item => item.id === 'left-group');
   if (leftGroup) {
     const idx = leftGroup.items.findIndex(item => item.id === 'document-menu-button');
@@ -157,7 +166,7 @@ document.getElementById('pdf-viewer').style.display = 'none';
   }
 
   ui.mergeSchema({
-    toolbars: { 'main-toolbar': { ...toolbar, items } }
+    toolbars: { 'main-toolbar': { ...toolbar, items, responsive } }
   });
 
   // Track page changes to persist current page for reload recovery
@@ -169,28 +178,6 @@ document.getElementById('pdf-viewer').style.display = 'none';
 
   resolveViewerReady();
 })();
-
-// EmbedPDF also by default hides the pan and pointer button on small screens,
-// but we don't want this behaviour. So we add a <style> with CSS to force it
-// to stay on screen no matter what.
-function forcePanPointerOnScreen() {
-  const container = document.querySelector('embedpdf-container');
-  if (!container?.shadowRoot?.querySelector('[data-epdf-i="pan-button"]')) return false;
-  if (container.shadowRoot.querySelector('#epdf-toolbar-fix')) return true;
-
-  const style = document.createElement('style');
-  style.id = 'epdf-toolbar-fix';
-  style.textContent = `
-    [data-epdf-i="pan-button"],
-    [data-epdf-i="pointer-button"] {
-      display: flex !important;
-    }
-  `;
-  container.shadowRoot.appendChild(style);
-  return true;
-}
-const fixInterval = setInterval(() => { if (forcePanPointerOnScreen()) clearInterval(fixInterval); }, 100);
-setTimeout(() => clearInterval(fixInterval), 10000);
 
 // ---------------------------------------------------------------------------
 //   API HELPERS
