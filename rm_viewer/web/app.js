@@ -83,6 +83,22 @@ document.getElementById('pdf-viewer').style.display = 'none';
   zoomPlugin = registry.getPlugin('zoom').provides();
   viewportPlugin = registry.getPlugin('viewport')?.provides();
 
+  // EmbedPDF starts mobile documents in panMode but initializes the pan
+  // plugin's isPanMode flag to false until the mode changes. Read the actual
+  // interaction mode so the hand is selected correctly from the first render.
+  commands.registerCommand({
+    id: 'pan:toggle',
+    labelKey: 'pan.toggle',
+    icon: 'hand',
+    shortcuts: ['h'],
+    categories: ['tools', 'pan'],
+    action: ({ registry, documentId }) => {
+      registry.getPlugin('pan').provides().forDocument(documentId).togglePan();
+    },
+    active: ({ state, documentId }) =>
+      state.plugins['interaction-manager']?.documents[documentId]?.activeMode === 'panMode'
+  });
+
   // Download icon (very left of screen)
   viewer.registerIcon('download', {
     viewBox: '0 0 24 24',
