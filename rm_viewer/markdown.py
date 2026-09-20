@@ -102,6 +102,10 @@ Diagrams and sketches
 - If a drawing is a flow, hierarchy, state machine, sequence, timeline or
   relationship graph that Mermaid can represent accurately, write it as
   Mermaid using the author's own labels.
+- In Mermaid labels, wrap every LaTeX expression in `$$...$$`, for example
+  `A["SSA uses $$\phi$$ nodes"]`. The surrounding Markdown renderer does not
+  process math inside Mermaid fences, so never write a bare command such as
+  `\phi` in a Mermaid label.
 - Memory layouts, stack frames, packet or struct layouts are usually clearer
   as a table or a fenced text block than as Mermaid.
 - Otherwise, put a brief italic description in the drawing's position, e.g.
