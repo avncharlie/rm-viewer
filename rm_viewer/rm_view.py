@@ -97,6 +97,16 @@ def create_app(output_dir: Path, debug: bool = False) -> Flask:
     # UI
     @app.get("/")
     def serve_index():
+        if app.config['VIEWER_DEBUG_LOGGING']:
+            index_path = Path(app.static_folder) / 'index.html'
+            html = index_path.read_text(encoding='utf-8').replace(
+                'data-viewer-debug="false"',
+                'data-viewer-debug="true"',
+                1,
+            )
+            response = Response(html, mimetype='text/html')
+            response.headers['Cache-Control'] = 'no-store'
+            return response
         return send_from_directory(str(app.static_folder), "index.html")
 
     # --- API routes ---

@@ -255,14 +255,7 @@ let markdownRenderVersion = 0;
 let markdownSearchHits = [];
 let markdownSearchIndex = -1;
 let activeMarkdownRequestId = null;
-let viewerDebugLogging = false;
-const viewerDebugReady = fetch('/api/generation')
-  .then(async response => {
-    if (!response.ok) return;
-    const status = await response.json();
-    viewerDebugLogging = status.viewer_debug === true;
-  })
-  .catch(() => {});
+let viewerDebugLogging = document.documentElement.dataset.viewerDebug === 'true';
 
 function reportMarkdownDebug(event, details = {}) {
   if (!viewerDebugLogging) return;
@@ -517,7 +510,6 @@ function closeDocumentViewer() {
 
 async function enterMarkdownMode(regenerate = false) {
   if (!currentPdfItemId) return;
-  await viewerDebugReady;
 
   const requestItemId = currentPdfItemId;
   const previousMarkdown = markdownItemId === requestItemId ? markdownText : '';
