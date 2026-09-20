@@ -1168,7 +1168,6 @@ html, body {
 
 @media (max-width: 480px) {
   #markdown-viewer { --markdown-font-size: 17px; }
-  .markdown-text-tool { display: none; }
 }
 
 /* pdf viewer – phone override: 95vh so Safari page-selector doesn't clip */
