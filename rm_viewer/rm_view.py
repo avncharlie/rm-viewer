@@ -1,5 +1,6 @@
 import logging
 import argparse
+import threading
 
 from pathlib import Path
 
@@ -10,7 +11,7 @@ from flask import Flask, send_from_directory, send_file, request, jsonify
 
 log = logging.getLogger(__name__)
 from .utils import validate_path
-from .rm_index import RemarkableIndex
+from .rm_index import RemarkableIndex, get_metadata_version
 from .rm_items import RemarkableDocument, RemarkableFolder
 
 STATIC_DIR = Path(__file__).with_name("web")
@@ -34,8 +35,40 @@ def build_view_parser(parser: argparse._SubParsersAction):
 def create_app(output_dir: Path) -> Flask:
     app = Flask(__name__, static_folder=STATIC_DIR, static_url_path='')
 
-    index = RemarkableIndex(output_dir)
-    generation = 0
+    output_dir = output_dir.resolve()
+    index_lock = threading.Lock()
+
+    def load_stable_index() -> tuple[RemarkableIndex, str]:
+        while True:
+            version_before = get_metadata_version(output_dir)
+            candidate = RemarkableIndex(output_dir)
+            version_after = get_metadata_version(output_dir)
+            if version_before == version_after:
+                return candidate, version_after
+
+    index, index_version = load_stable_index()
+
+    def refresh_index(force: bool = False):
+        """Reload this worker when another process publishes new metadata."""
+        nonlocal index, index_version
+
+        disk_version = get_metadata_version(output_dir)
+        if not force and disk_version == index_version:
+            return
+
+        with index_lock:
+            disk_version = get_metadata_version(output_dir)
+            if not force and disk_version == index_version:
+                return
+
+            # Atomic metadata replacement makes matching before/after tokens a
+            # reliable indication that this is one complete metadata version.
+            index, index_version = load_stable_index()
+
+    @app.before_request
+    def refresh_worker_index():
+        if request.path.startswith('/api/') and request.endpoint != 'api_rebuild':
+            refresh_index()
 
     # UI
     @app.get("/")
@@ -108,14 +141,12 @@ def create_app(output_dir: Path) -> Flask:
 
     @app.post("/api/rebuild")
     def api_rebuild():
-        nonlocal index, generation
-        index = RemarkableIndex(output_dir)
-        generation += 1
-        return jsonify({"status": "ok"})
+        refresh_index(force=True)
+        return jsonify({"status": "ok", "generation": index_version})
 
     @app.get("/api/generation")
     def api_generation():
-        return jsonify({"generation": generation})
+        return jsonify({"generation": index_version})
 
     @app.get("/api/download/zip")
     def api_download_zip():

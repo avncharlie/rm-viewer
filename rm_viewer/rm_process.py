@@ -21,6 +21,25 @@ from .ocr import run_ocr_on_rm_output, add_text_layer_to_page
 
 log = logging.getLogger(__name__)
 
+
+def _write_json_atomic(path: Path, data) -> None:
+    """Write JSON without exposing a partially written destination file."""
+    fd, temp_name = tempfile.mkstemp(
+        dir=path.parent,
+        prefix=f'.{path.name}.',
+        suffix='.tmp',
+    )
+    temp_path = Path(temp_name)
+    try:
+        with os.fdopen(fd, 'w') as f:
+            json.dump(data, f, indent=2)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(temp_path, path)
+    finally:
+        temp_path.unlink(missing_ok=True)
+
+
 def xx_dir_hash(directory: Path) -> str:
     """Compute a hash of all files in directory for change detection."""
     h = xxhash.xxh3_64()
@@ -952,8 +971,7 @@ def run_rm_process(xochitl_dir: Path, output_dir: Path, *, no_ocr=False, ocr_deb
                     shutil.rmtree(old_dir)
 
     metadata_path = output_dir / 'metadata.json'
-    with open(metadata_path, 'w') as f:
-        json.dump(full_metadata, f, indent=2)
+    _write_json_atomic(metadata_path, full_metadata)
 
     if errors:
         errors_path = output_dir / 'errors.json'

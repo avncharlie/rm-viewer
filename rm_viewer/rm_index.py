@@ -11,6 +11,16 @@ from .rm_items import (
 log = logging.getLogger(__name__)
 
 
+def get_metadata_version(output_dir: Path) -> str:
+    """Return a process-independent token for the published metadata file."""
+    metadata_path = output_dir.resolve() / 'metadata.json'
+    try:
+        stat = metadata_path.stat()
+    except FileNotFoundError:
+        return 'missing'
+    return f'{stat.st_dev}:{stat.st_ino}:{stat.st_mtime_ns}:{stat.st_size}'
+
+
 class RemarkableIndex:
     """In-memory index built from the output directory at startup."""
 
