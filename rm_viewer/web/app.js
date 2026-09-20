@@ -822,6 +822,51 @@ const searchClear = document.getElementById('search_clear');
 
 let searchDebounceTimer = null;
 
+function getVisiblePdfSearchInput() {
+  const container = document.querySelector('#pdf-viewer embedpdf-container');
+  const input = container?.shadowRoot?.querySelector('input[type="text"][placeholder="Search"]');
+  return input?.getClientRects().length ? input : null;
+}
+
+function focusPdfSearchInput(attemptsRemaining = 30) {
+  const input = getVisiblePdfSearchInput();
+  if (input) {
+    input.focus({ preventScroll: true });
+    input.select();
+    return;
+  }
+  if (attemptsRemaining > 0) {
+    requestAnimationFrame(() => focusPdfSearchInput(attemptsRemaining - 1));
+  }
+}
+
+// EmbedPDF opens its search panel after handling the shortcut, so its input
+// may not exist until a subsequent frame.
+document.addEventListener('keydown', (event) => {
+  const isFindShortcut = (event.ctrlKey || event.metaKey)
+    && !event.altKey
+    && !event.shiftKey
+    && event.key.toLowerCase() === 'f';
+  if (!isFindShortcut) return;
+
+  const pdfViewer = document.getElementById('pdf-viewer');
+  if (pdfViewer.style.display !== 'none') {
+    const input = getVisiblePdfSearchInput();
+    if (input) {
+      event.preventDefault();
+      input.focus({ preventScroll: true });
+      input.select();
+    } else {
+      focusPdfSearchInput();
+    }
+    return;
+  }
+
+  event.preventDefault();
+  searchInput.focus({ preventScroll: true });
+  searchInput.select();
+}, true);
+
 function updateSearchClear() {
   searchBar.classList.toggle('has_text', searchInput.value.length > 0);
 }
