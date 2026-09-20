@@ -20,10 +20,12 @@ def setup_logger(log):
         }
         def format(self, record):
             color = self.LEVEL_COLORS.get(record.levelno, '')
-            log_msg = f"{color}{record.levelname} - {record.name} - {record.msg}{end}"
-            return log_msg
+            return f"{color}{super().format(record)}{end}"
     handler = logging.StreamHandler(sys.stdout)
-    formatter = CustomFormatter("%(levelname)s - %(name)s - %(message)s")
+    formatter = CustomFormatter(
+        "%(asctime)s %(levelname)s - %(name)s - %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
     handler.setFormatter(formatter)
     log.setLevel(logging.INFO)
     # log.setLevel(logging.DEBUG)

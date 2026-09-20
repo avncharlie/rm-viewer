@@ -254,6 +254,48 @@ let markdownRenderFrame = null;
 let markdownRenderVersion = 0;
 let markdownSearchHits = [];
 let markdownSearchIndex = -1;
+let activeMarkdownRequestId = null;
+let viewerDebugLogging = false;
+const viewerDebugReady = fetch('/api/generation')
+  .then(async response => {
+    if (!response.ok) return;
+    const status = await response.json();
+    viewerDebugLogging = status.viewer_debug === true;
+  })
+  .catch(() => {});
+
+function reportMarkdownDebug(event, details = {}) {
+  if (!viewerDebugLogging) return;
+  console.debug(`[Markdown debug] ${event}`, details);
+  fetch('/api/debug/client', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      event,
+      item_id: currentPdfItemId,
+      markdown_request_id: activeMarkdownRequestId,
+      details,
+    }),
+    keepalive: true,
+  }).catch(() => {});
+}
+
+window.addEventListener('error', event => {
+  reportMarkdownDebug('window_error', {
+    message: event.message,
+    filename: event.filename,
+    line: event.lineno,
+    column: event.colno,
+    stack: event.error?.stack,
+  });
+});
+
+window.addEventListener('unhandledrejection', event => {
+  reportMarkdownDebug('unhandled_rejection', {
+    message: event.reason?.message || String(event.reason),
+    stack: event.reason?.stack,
+  });
+});
 
 const markdownRenderer = window.markdownit({
   html: false,
@@ -328,6 +370,11 @@ async function renderMermaidDiagrams(version) {
       }
     } catch (error) {
       console.warn('Could not render Mermaid diagram:', error);
+      reportMarkdownDebug('mermaid_render_failed', {
+        diagram: index,
+        message: error.message || String(error),
+        stack: error.stack,
+      });
     } finally {
       // Older Mermaid builds can leave their off-screen render container in
       // <body> after a parse failure.
@@ -349,7 +396,16 @@ function scheduleMarkdownRender(source) {
   markdownRenderFrame = requestAnimationFrame(() => {
     markdownRenderFrame = null;
     // Mermaid fences are commonly incomplete while tokens are arriving.
-    renderMarkdown(source, false);
+    try {
+      renderMarkdown(source, false);
+    } catch (error) {
+      reportMarkdownDebug('incremental_render_failed', {
+        source_chars: source.length,
+        message: error.message || String(error),
+        stack: error.stack,
+      });
+      throw error;
+    }
   });
 }
 
@@ -461,17 +517,24 @@ function closeDocumentViewer() {
 
 async function enterMarkdownMode(regenerate = false) {
   if (!currentPdfItemId) return;
+  await viewerDebugReady;
 
   const requestItemId = currentPdfItemId;
   const previousMarkdown = markdownItemId === requestItemId ? markdownText : '';
   stopMarkdownRequest();
   const controller = new AbortController();
   markdownAbortController = controller;
+  activeMarkdownRequestId = null;
   const isCurrentRequest = () => (
     controller === markdownAbortController && requestItemId === currentPdfItemId
   );
   markdownViewer.classList.add('active', 'loading');
   markdownStatusText.textContent = regenerate ? 'Regenerating Markdown…' : 'Creating Markdown…';
+  reportMarkdownDebug('request_started', {
+    request_item_id: requestItemId,
+    regenerate,
+    has_previous_markdown: Boolean(previousMarkdown),
+  });
 
   if (previousMarkdown) {
     markdownViewer.classList.add('show-content');
@@ -490,9 +553,21 @@ async function enterMarkdownMode(regenerate = false) {
         body: JSON.stringify({ regenerate: requestRegenerate }),
         signal: controller.signal,
       });
+      activeMarkdownRequestId = response.headers.get('X-Markdown-Request-ID');
+      reportMarkdownDebug('response_received', {
+        status: response.status,
+        status_text: response.statusText,
+        cache: response.headers.get('X-Markdown-Cache'),
+        content_type: response.headers.get('Content-Type'),
+        content_length: response.headers.get('Content-Length'),
+        retry_after: response.headers.get('Retry-After'),
+      });
       if (response.status !== 409) break;
 
       const contentionMessage = await response.text();
+      reportMarkdownDebug('generation_contended', {
+        message: contentionMessage,
+      });
       if (!isCurrentRequest()) return;
       if (contentionMessage === 'Markdown generation is already in progress') {
         requestRegenerate = false;
@@ -512,6 +587,7 @@ async function enterMarkdownMode(regenerate = false) {
     const decoder = new TextDecoder();
     let generatedMarkdown = '';
     let receivedText = false;
+    let responseChunks = 0;
 
     while (true) {
       const { value, done } = await reader.read();
@@ -520,6 +596,14 @@ async function enterMarkdownMode(regenerate = false) {
         return;
       }
       const text = decoder.decode(value || new Uint8Array(), { stream: !done });
+      responseChunks += done ? 0 : 1;
+      reportMarkdownDebug('response_chunk_read', {
+        chunk: responseChunks,
+        bytes: value?.byteLength || 0,
+        chars: text.length,
+        total_chars: generatedMarkdown.length + text.length,
+        done,
+      });
       if (text) {
         generatedMarkdown += text;
         if (!receivedText) {
@@ -541,7 +625,19 @@ async function enterMarkdownMode(regenerate = false) {
     markdownItemId = requestItemId;
     renderMarkdown(markdownText);
     markdownViewer.classList.remove('loading');
+    reportMarkdownDebug('request_completed', {
+      chunks: responseChunks,
+      chars: markdownText.length,
+      rendered_elements: markdownContent.childElementCount,
+    });
   } catch (error) {
+    reportMarkdownDebug('request_failed', {
+      name: error.name,
+      message: error.message || String(error),
+      stack: error.stack,
+      is_current_request: isCurrentRequest(),
+      has_previous_markdown: Boolean(previousMarkdown),
+    });
     if (!isCurrentRequest()) return;
     markdownViewer.classList.remove('loading');
     if (previousMarkdown) {
@@ -556,6 +652,13 @@ async function enterMarkdownMode(regenerate = false) {
       console.error('Markdown generation failed:', error);
     }
   } finally {
+    reportMarkdownDebug('request_finished', {
+      controller_aborted: controller.signal.aborted,
+      is_current_request: isCurrentRequest(),
+      viewer_active: markdownViewer.classList.contains('active'),
+      viewer_loading: markdownViewer.classList.contains('loading'),
+      viewer_show_content: markdownViewer.classList.contains('show-content'),
+    });
     if (controller === markdownAbortController) markdownAbortController = null;
   }
 }
@@ -1405,7 +1508,8 @@ setInterval(async () => {
   try {
     const res = await fetch('/api/generation');
     if (!res.ok) return;
-    const { generation } = await res.json();
+    const { generation, viewer_debug: viewerDebug } = await res.json();
+    viewerDebugLogging = viewerDebug === true;
     if (knownGeneration === null) {
       knownGeneration = generation;
       return;

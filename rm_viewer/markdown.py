@@ -1,10 +1,14 @@
 from collections.abc import Iterator
 import hashlib
+import logging
 from pathlib import Path
+import time
 
 from google import genai
 from google.genai import types
 
+
+log = logging.getLogger(__name__)
 
 MODEL = "gemini-3.1-pro-preview"
 TEMPERATURE = 1
@@ -130,31 +134,121 @@ def load_api_key() -> str:
     return api_key
 
 
-def stream_pdf_markdown(pdf_bytes: bytes, api_key: str | None = None) -> Iterator[str]:
-    with genai.Client(
-        vertexai=True,
-        api_key=api_key or load_api_key(),
-        http_options=types.HttpOptions(timeout=REQUEST_TIMEOUT_MS),
-    ) as client:
-        response_stream = client.models.generate_content_stream(
-            model=MODEL,
-            contents=[
-                types.Part.from_bytes(data=pdf_bytes, mime_type="application/pdf"),
-                PROMPT,
-            ],
-            config=types.GenerateContentConfig(
-                temperature=TEMPERATURE,
-                automatic_function_calling=types.AutomaticFunctionCallingConfig(
-                    disable=True
-                ),
-            ),
+def stream_pdf_markdown(
+    pdf_bytes: bytes,
+    api_key: str | None = None,
+    request_id: str | None = None,
+) -> Iterator[str]:
+    started = time.monotonic()
+    request_label = request_id or 'untracked'
+    raw_chunks = 0
+    text_chunks = 0
+    text_chars = 0
+    completed = False
+
+    def debug_log(event: str, **details):
+        if not log.isEnabledFor(logging.DEBUG):
+            return
+        fields = ' '.join(
+            f'{name}={value!r}' for name, value in sorted(details.items())
+        )
+        suffix = f' {fields}' if fields else ''
+        log.debug(
+            'gemini request=%s elapsed=%.3fs event=%s%s',
+            request_label,
+            time.monotonic() - started,
+            event,
+            suffix,
         )
 
-        yielded_text = False
-        for chunk in response_stream:
-            if chunk.text:
-                yielded_text = True
-                yield chunk.text
+    debug_log(
+        'client_opening',
+        model=MODEL,
+        temperature=TEMPERATURE,
+        timeout_ms=REQUEST_TIMEOUT_MS,
+        pdf_bytes=len(pdf_bytes),
+        api_key_source='argument' if api_key else str(API_KEY_PATH),
+    )
+    try:
+        with genai.Client(
+            vertexai=True,
+            api_key=api_key or load_api_key(),
+            http_options=types.HttpOptions(timeout=REQUEST_TIMEOUT_MS),
+        ) as client:
+            debug_log('request_starting')
+            response_stream = client.models.generate_content_stream(
+                model=MODEL,
+                contents=[
+                    types.Part.from_bytes(data=pdf_bytes, mime_type="application/pdf"),
+                    PROMPT,
+                ],
+                config=types.GenerateContentConfig(
+                    temperature=TEMPERATURE,
+                    automatic_function_calling=types.AutomaticFunctionCallingConfig(
+                        disable=True
+                    ),
+                ),
+            )
+            debug_log('response_stream_opened')
 
-        if not yielded_text:
-            raise RuntimeError("Gemini returned no Markdown text")
+            for chunk in response_stream:
+                raw_chunks += 1
+                text = chunk.text or ''
+                candidates = getattr(chunk, 'candidates', None) or []
+                finish_reasons = [
+                    str(getattr(candidate, 'finish_reason', None))
+                    for candidate in candidates
+                    if getattr(candidate, 'finish_reason', None) is not None
+                ]
+                debug_log(
+                    'raw_chunk_received',
+                    raw_chunk=raw_chunks,
+                    text_chars=len(text),
+                    candidate_count=len(candidates),
+                    finish_reasons=finish_reasons,
+                    response_id=getattr(chunk, 'response_id', None),
+                    model_version=getattr(chunk, 'model_version', None),
+                    usage_metadata=repr(getattr(chunk, 'usage_metadata', None)),
+                )
+                if text:
+                    text_chunks += 1
+                    text_chars += len(text)
+                    yield text
+
+            if not text_chunks:
+                debug_log('no_text_returned', raw_chunks=raw_chunks)
+                raise RuntimeError("Gemini returned no Markdown text")
+            completed = True
+            debug_log(
+                'completed',
+                raw_chunks=raw_chunks,
+                text_chunks=text_chunks,
+                text_chars=text_chars,
+            )
+    except GeneratorExit:
+        debug_log(
+            'closed_by_caller',
+            raw_chunks=raw_chunks,
+            text_chunks=text_chunks,
+            text_chars=text_chars,
+        )
+        raise
+    except Exception:
+        log.exception(
+            'Gemini request %s failed after %.3fs (raw_chunks=%d, '
+            'text_chunks=%d, text_chars=%d)',
+            request_label,
+            time.monotonic() - started,
+            raw_chunks,
+            text_chunks,
+            text_chars,
+        )
+        raise
+    finally:
+        debug_log(
+            'client_closed',
+            completed=completed,
+            raw_chunks=raw_chunks,
+            text_chunks=text_chunks,
+            text_chars=text_chars,
+        )
