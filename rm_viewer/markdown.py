@@ -12,11 +12,13 @@ log = logging.getLogger(__name__)
 
 MODEL = "gemini-3.1-pro-preview"
 TEMPERATURE = 1
+THINKING_LEVEL = types.ThinkingLevel.LOW
 REQUEST_TIMEOUT_MS = 180_000
 API_KEY_PATH = Path(__file__).resolve().parent.parent / "agentplatform_api_key"
 
-PROMPT = r"""Transcribe the attached PDF of handwritten notes into a single
-faithful Markdown document. The notes were written on a reMarkable tablet.
+PROMPT = r""" Convert the attached PDF into a single faithful Markdown
+document. It may contain handwritten notes, typed or printed pages, imported
+documents, images, and handwritten annotations over printed content.
 
 # Method
 
@@ -127,7 +129,7 @@ closing remarks and no notes about the transcription.
 """
 
 GENERATOR_SIGNATURE = hashlib.sha256(
-    f"{MODEL}\0{TEMPERATURE}\0{PROMPT}".encode("utf-8")
+    f"{MODEL}\0{TEMPERATURE}\0{THINKING_LEVEL.value}\0{PROMPT}".encode("utf-8")
 ).hexdigest()
 
 
@@ -169,6 +171,7 @@ def stream_pdf_markdown(
         'client_opening',
         model=MODEL,
         temperature=TEMPERATURE,
+        thinking_level=THINKING_LEVEL.value,
         timeout_ms=REQUEST_TIMEOUT_MS,
         pdf_bytes=len(pdf_bytes),
         api_key_source='argument' if api_key else str(API_KEY_PATH),
@@ -188,6 +191,9 @@ def stream_pdf_markdown(
                 ],
                 config=types.GenerateContentConfig(
                     temperature=TEMPERATURE,
+                    thinking_config=types.ThinkingConfig(
+                        thinking_level=THINKING_LEVEL,
+                    ),
                     automatic_function_calling=types.AutomaticFunctionCallingConfig(
                         disable=True
                     ),
