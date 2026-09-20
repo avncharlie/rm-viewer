@@ -421,6 +421,21 @@ function invalidateMarkdownRequest() {
   if (controller) controller.abort();
 }
 
+function waitForMarkdownRetry(milliseconds, signal) {
+  signal.throwIfAborted();
+  return new Promise((resolve, reject) => {
+    const onAbort = () => {
+      clearTimeout(timeout);
+      reject(new DOMException('The request was aborted', 'AbortError'));
+    };
+    const timeout = setTimeout(() => {
+      signal.removeEventListener('abort', onAbort);
+      resolve();
+    }, milliseconds);
+    signal.addEventListener('abort', onAbort, { once: true });
+  });
+}
+
 function showPdfMode() {
   invalidateMarkdownRequest();
   markdownViewer.classList.remove('active', 'loading');
@@ -466,12 +481,26 @@ async function enterMarkdownMode(regenerate = false) {
   }
 
   try {
-    const response = await fetch(`/api/tree/${requestItemId}/markdown`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ regenerate }),
-      signal: controller.signal,
-    });
+    let response;
+    let requestRegenerate = regenerate;
+    while (true) {
+      response = await fetch(`/api/tree/${requestItemId}/markdown`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ regenerate: requestRegenerate }),
+        signal: controller.signal,
+      });
+      if (response.status !== 409) break;
+
+      const contentionMessage = await response.text();
+      if (!isCurrentRequest()) return;
+      if (contentionMessage === 'Markdown generation is already in progress') {
+        requestRegenerate = false;
+      }
+      const retryAfter = Number(response.headers.get('Retry-After')) || 2;
+      markdownStatusText.textContent = 'Waiting for another transcription…';
+      await waitForMarkdownRetry(retryAfter * 1000, controller.signal);
+    }
     if (!isCurrentRequest()) {
       await response.body?.cancel();
       return;

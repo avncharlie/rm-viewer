@@ -247,11 +247,44 @@ def create_app(output_dir: Path) -> Flask:
         )
         markdown_temp_path = Path(markdown_temp_name)
         metadata_temp_path = None
+        markdown_file = None
+        markdown_fd_open = True
+        cleanup_complete = False
+        cleanup_guard = threading.Lock()
+
+        def cleanup_generation():
+            nonlocal cleanup_complete, markdown_fd_open
+            with cleanup_guard:
+                if cleanup_complete:
+                    return
+                cleanup_complete = True
+
+            close_stream = getattr(markdown_stream, 'close', None)
+            if close_stream:
+                try:
+                    close_stream()
+                except Exception as error:
+                    log.warning('Failed to close Gemini stream: %s', error)
+            if markdown_file and not markdown_file.closed:
+                markdown_file.close()
+            elif markdown_fd_open:
+                os.close(markdown_fd)
+                markdown_fd_open = False
+            markdown_temp_path.unlink(missing_ok=True)
+            if metadata_temp_path:
+                metadata_temp_path.unlink(missing_ok=True)
+            if not generation_lock_file.closed:
+                fcntl.flock(generation_lock_file.fileno(), fcntl.LOCK_UN)
+                generation_lock_file.close()
+            if not lock_file.closed:
+                fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+                lock_file.close()
 
         @stream_with_context
         def generate():
-            nonlocal metadata_temp_path
+            nonlocal markdown_fd_open, markdown_file, metadata_temp_path
             markdown_file = os.fdopen(markdown_fd, 'w', encoding='utf-8')
+            markdown_fd_open = False
             try:
                 for text in chain((first_chunk,), markdown_stream):
                     markdown_file.write(text)
@@ -302,23 +335,11 @@ def create_app(output_dir: Path) -> Flask:
 
                 os.replace(markdown_temp_path, cache_path)
                 os.replace(metadata_temp_path, metadata_path)
-            except GeneratorExit:
-                close_stream = getattr(markdown_stream, 'close', None)
-                if close_stream:
-                    close_stream()
-                raise
             finally:
-                if not markdown_file.closed:
-                    markdown_file.close()
-                markdown_temp_path.unlink(missing_ok=True)
-                if metadata_temp_path:
-                    metadata_temp_path.unlink(missing_ok=True)
-                fcntl.flock(generation_lock_file.fileno(), fcntl.LOCK_UN)
-                generation_lock_file.close()
-                fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
-                lock_file.close()
+                cleanup_generation()
 
         response = Response(generate(), mimetype='text/markdown')
+        response.call_on_close(cleanup_generation)
         response.headers['X-Markdown-Cache'] = 'MISS'
         response.headers['Cache-Control'] = 'no-store'
         response.headers['X-Accel-Buffering'] = 'no'
