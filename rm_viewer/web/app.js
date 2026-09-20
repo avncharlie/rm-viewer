@@ -351,6 +351,32 @@ function markUncertainText() {
   });
 }
 
+function renderSafeBreakTags() {
+  const walker = document.createTreeWalker(markdownContent, NodeFilter.SHOW_TEXT, {
+    acceptNode(node) {
+      if (!/<br\s*\/?>/i.test(node.data)) return NodeFilter.FILTER_REJECT;
+      if (node.parentElement.closest('code, pre, .katex, .md-mermaid, svg')) {
+        return NodeFilter.FILTER_REJECT;
+      }
+      return NodeFilter.FILTER_ACCEPT;
+    },
+  });
+  const nodes = [];
+  while (walker.nextNode()) nodes.push(walker.currentNode);
+
+  nodes.forEach(node => {
+    const fragment = document.createDocumentFragment();
+    let offset = 0;
+    for (const match of node.data.matchAll(/<br\s*\/?>/gi)) {
+      fragment.append(node.data.slice(offset, match.index));
+      fragment.append(document.createElement('br'));
+      offset = match.index + match[0].length;
+    }
+    fragment.append(node.data.slice(offset));
+    node.replaceWith(fragment);
+  });
+}
+
 async function renderMermaidDiagrams(version) {
   const diagrams = [...markdownContent.querySelectorAll('.md-mermaid')];
   await Promise.all(diagrams.map(async (container, index) => {
@@ -379,6 +405,7 @@ async function renderMermaidDiagrams(version) {
 function renderMarkdown(source, renderDiagrams = true) {
   const version = ++markdownRenderVersion;
   markdownContent.innerHTML = markdownRenderer.render(source);
+  renderSafeBreakTags();
   markUncertainText();
   if (markdownSearchInput.value) updateMarkdownSearch();
   if (renderDiagrams) renderMermaidDiagrams(version);
