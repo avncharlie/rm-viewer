@@ -26,8 +26,13 @@ $ curl -LO https://dl.google.com/linux/direct/google-chrome-stable_current_amd64
 $ apt install -y ./google-chrome-stable_current_amd64.deb
 ```
 
-For handwriting recongition, create a file called 'gcv_api_key' with your
+For handwriting recognition, create a file called 'gcv_api_key' with your
 Google Cloud Vision API key in this directory.
+
+For handwritten notes to markdown convertion, create a file called
+'agentplatform_api_key' with your your Google Cloud Agent Platform API key in
+this directory.
+
 Use the scripts in debug/ to test your key and make sure it works.
 
 ```sh

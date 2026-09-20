@@ -1,6 +1,7 @@
 CLAUDE.md
 .DS_Store
 gcv_api_key
+agentplatform_api_key
 out/
 remarks_out/
 __pycache__/

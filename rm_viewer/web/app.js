@@ -11,9 +11,29 @@ let uiPlugin;
 let zoomPlugin;
 let viewportPlugin;
 let currentPdfUrl;
+let currentPdfItemId = null;
+let currentPdfName = 'document';
 let currentPdfLastModified = null;
 let resolveViewerReady;
 const viewerReady = new Promise(r => { resolveViewerReady = r; });
+
+// Capture find before EmbedPDF's global shortcut handler while Markdown is open.
+window.addEventListener('keydown', event => {
+  if (
+    !document.getElementById('markdown-viewer').classList.contains('active')
+    || !(event.metaKey || event.ctrlKey)
+    || event.key.toLowerCase() !== 'f'
+  ) {
+    return;
+  }
+
+  event.preventDefault();
+  event.stopImmediatePropagation();
+  document.querySelector('.markdown-search-wrap').classList.add('open');
+  const input = document.getElementById('markdown-search-input');
+  input.focus();
+  input.select();
+}, true);
 
 // Set a custom theme to match reMarkable theme
 const viewer = EmbedPDF.init({
@@ -99,6 +119,21 @@ document.getElementById('pdf-viewer').style.display = 'none';
       state.plugins['interaction-manager']?.documents[documentId]?.activeMode === 'panMode'
   });
 
+  viewer.registerIcon('markdown', {
+    viewBox: '2 4 20 16',
+    paths: [
+      { d: 'M3 5m0 2a2 2 0 0 1 2 -2h14a2 2 0 0 1 2 2v10a2 2 0 0 1 -2 2h-14a2 2 0 0 1 -2 -2z', stroke: 'currentColor', strokeWidth: 1.6, fill: 'none' },
+      { d: 'M7 15v-6l2 2l2 -2v6', stroke: 'currentColor', strokeWidth: 1.6, fill: 'none' },
+      { d: 'M14 13l2 2l2 -2m-2 2v-6', stroke: 'currentColor', strokeWidth: 1.6, fill: 'none' }
+    ]
+  });
+  commands.registerCommand({
+    id: 'custom.markdown',
+    label: 'View as Markdown',
+    icon: 'markdown',
+    action: () => enterMarkdownMode()
+  });
+
   // Download icon (very left of screen)
   viewer.registerIcon('download', {
     viewBox: '0 0 24 24',
@@ -154,18 +189,7 @@ document.getElementById('pdf-viewer').style.display = 'none';
     id: 'custom.close',
     label: 'Close',
     icon: 'close-x',
-    action: () => {
-      localStorage.removeItem('rmviewer.pdfItemId');
-      localStorage.removeItem('rmviewer.pdfPage');
-      currentPdfLastModified = null;
-      document.body.style.overflow = '';
-      const el = document.getElementById('pdf-viewer');
-      el.classList.add('closing');
-      el.addEventListener('transitionend', () => {
-        el.style.display = 'none';
-        el.classList.remove('closing');
-      }, { once: true });
-    }
+    action: closeDocumentViewer
   });
   // Position on very left of right (replacing menu button)
   const rightGroup = items.find(item => item.id === 'right-group');
@@ -181,6 +205,23 @@ document.getElementById('pdf-viewer').style.display = 'none';
     }
   }
 
+  const insertMarkdownBeforeSearch = (groupItems) => {
+    const searchIndex = groupItems.findIndex(item =>
+      /search/i.test(item.id || '') || /search/i.test(item.commandId || '')
+    );
+    if (searchIndex !== -1) {
+      groupItems.splice(searchIndex, 0, {
+        type: 'command-button',
+        id: 'markdown-button',
+        commandId: 'custom.markdown',
+        variant: 'icon'
+      });
+      return true;
+    }
+    return groupItems.some(item => item.items && insertMarkdownBeforeSearch(item.items));
+  };
+  insertMarkdownBeforeSearch(items);
+
   ui.mergeSchema({
     toolbars: { 'main-toolbar': { ...toolbar, items, responsive } }
   });
@@ -194,6 +235,342 @@ document.getElementById('pdf-viewer').style.display = 'none';
 
   resolveViewerReady();
 })();
+
+// ---------------------------------------------------------------------------
+//   MARKDOWN VIEWER
+// ---------------------------------------------------------------------------
+
+const markdownViewer = document.getElementById('markdown-viewer');
+const markdownContent = document.getElementById('markdown-content');
+const markdownStatusText = document.querySelector('#markdown-status span');
+const markdownSearchWrap = document.querySelector('.markdown-search-wrap');
+const markdownSearchInput = document.getElementById('markdown-search-input');
+const markdownSearchCount = document.getElementById('markdown-search-count');
+let markdownAbortController = null;
+let markdownText = '';
+let markdownItemId = null;
+let markdownFontSize = 18;
+let markdownRenderFrame = null;
+let markdownRenderVersion = 0;
+let markdownSearchHits = [];
+let markdownSearchIndex = -1;
+
+const markdownRenderer = window.markdownit({
+  html: false,
+  linkify: true,
+  typographer: false,
+});
+markdownRenderer.use(window.texmath, {
+  engine: window.katex,
+  delimiters: 'dollars',
+  katexOptions: { throwOnError: false, strict: false },
+});
+markdownRenderer.use(window.markdownitTaskLists, { enabled: true });
+
+const defaultFenceRenderer = markdownRenderer.renderer.rules.fence;
+markdownRenderer.renderer.rules.fence = (tokens, index, options, env, self) => {
+  const language = tokens[index].info.trim().split(/\s+/)[0].toLowerCase();
+  if (language === 'mermaid') {
+    const source = markdownRenderer.utils.escapeHtml(tokens[index].content);
+    return `<div class="md-mermaid"><pre>${source}</pre></div>`;
+  }
+  return defaultFenceRenderer(tokens, index, options, env, self);
+};
+
+window.mermaid.initialize({
+  startOnLoad: false,
+  securityLevel: 'strict',
+  suppressErrorRendering: true,
+  theme: 'neutral',
+  fontFamily: 'reMarkable Sans, sans-serif',
+});
+
+function markUncertainText() {
+  const walker = document.createTreeWalker(markdownContent, NodeFilter.SHOW_TEXT, {
+    acceptNode(node) {
+      if (!/\[illegible\]|\[[^\]\n]+\?\]/i.test(node.data)) {
+        return NodeFilter.FILTER_REJECT;
+      }
+      if (node.parentElement.closest('code, pre, .katex, .md-mermaid, svg')) {
+        return NodeFilter.FILTER_REJECT;
+      }
+      return NodeFilter.FILTER_ACCEPT;
+    },
+  });
+  const nodes = [];
+  while (walker.nextNode()) nodes.push(walker.currentNode);
+
+  nodes.forEach(node => {
+    const fragment = document.createDocumentFragment();
+    let offset = 0;
+    for (const match of node.data.matchAll(/\[illegible\]|\[[^\]\n]+\?\]/gi)) {
+      fragment.append(node.data.slice(offset, match.index));
+      const span = document.createElement('span');
+      span.className = 'md_uncertain';
+      span.textContent = match[0];
+      fragment.append(span);
+      offset = match.index + match[0].length;
+    }
+    fragment.append(node.data.slice(offset));
+    node.replaceWith(fragment);
+  });
+}
+
+async function renderMermaidDiagrams(version) {
+  const diagrams = [...markdownContent.querySelectorAll('.md-mermaid')];
+  await Promise.all(diagrams.map(async (container, index) => {
+    const source = container.textContent.replace(/\\n/g, '<br/>');
+    const renderId = `markdown-mermaid-${version}-${index}`;
+    try {
+      const result = await window.mermaid.render(renderId, source);
+      if (version === markdownRenderVersion && container.isConnected) {
+        container.innerHTML = result.svg;
+      }
+    } catch (error) {
+      console.warn('Could not render Mermaid diagram:', error);
+    } finally {
+      // Older Mermaid builds can leave their off-screen render container in
+      // <body> after a parse failure.
+      document.getElementById(`d${renderId}`)?.remove();
+    }
+  }));
+}
+
+function renderMarkdown(source, renderDiagrams = true) {
+  const version = ++markdownRenderVersion;
+  markdownContent.innerHTML = markdownRenderer.render(source);
+  markUncertainText();
+  if (markdownSearchInput.value) updateMarkdownSearch();
+  if (renderDiagrams) renderMermaidDiagrams(version);
+}
+
+function scheduleMarkdownRender(source) {
+  if (markdownRenderFrame) cancelAnimationFrame(markdownRenderFrame);
+  markdownRenderFrame = requestAnimationFrame(() => {
+    markdownRenderFrame = null;
+    // Mermaid fences are commonly incomplete while tokens are arriving.
+    renderMarkdown(source, false);
+  });
+}
+
+function clearMarkdownSearch() {
+  markdownContent.querySelectorAll('mark.md-search-hit').forEach(mark => {
+    mark.replaceWith(document.createTextNode(mark.textContent));
+  });
+  markdownContent.normalize();
+  markdownSearchHits = [];
+  markdownSearchIndex = -1;
+  markdownSearchCount.textContent = '';
+}
+
+function updateMarkdownSearch() {
+  clearMarkdownSearch();
+  const query = markdownSearchInput.value.trim();
+  if (!query) return;
+
+  const escapedQuery = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const expression = new RegExp(escapedQuery, 'gi');
+  const walker = document.createTreeWalker(markdownContent, NodeFilter.SHOW_TEXT, {
+    acceptNode(node) {
+      return node.parentElement.closest('script, style, svg')
+        ? NodeFilter.FILTER_REJECT
+        : NodeFilter.FILTER_ACCEPT;
+    },
+  });
+  const nodes = [];
+  while (walker.nextNode()) nodes.push(walker.currentNode);
+
+  nodes.forEach(node => {
+    const matches = [...node.data.matchAll(expression)];
+    if (!matches.length) return;
+    const fragment = document.createDocumentFragment();
+    let offset = 0;
+    matches.forEach(match => {
+      fragment.append(node.data.slice(offset, match.index));
+      const mark = document.createElement('mark');
+      mark.className = 'md-search-hit';
+      mark.textContent = match[0];
+      fragment.append(mark);
+      offset = match.index + match[0].length;
+    });
+    fragment.append(node.data.slice(offset));
+    node.replaceWith(fragment);
+  });
+  markdownSearchHits = [...markdownContent.querySelectorAll('mark.md-search-hit')];
+  if (markdownSearchHits.length) showMarkdownSearchHit(0);
+  else markdownSearchCount.textContent = '0 results';
+}
+
+function showMarkdownSearchHit(index) {
+  if (!markdownSearchHits.length) return;
+  markdownSearchHits.forEach(hit => hit.classList.remove('current'));
+  markdownSearchIndex = (index + markdownSearchHits.length) % markdownSearchHits.length;
+  const hit = markdownSearchHits[markdownSearchIndex];
+  hit.classList.add('current');
+  hit.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  markdownSearchCount.textContent = `${markdownSearchIndex + 1} / ${markdownSearchHits.length}`;
+}
+
+function stopMarkdownRequest() {
+  if (markdownAbortController) markdownAbortController.abort();
+}
+
+function invalidateMarkdownRequest() {
+  const controller = markdownAbortController;
+  markdownAbortController = null;
+  if (controller) controller.abort();
+}
+
+function showPdfMode() {
+  invalidateMarkdownRequest();
+  markdownViewer.classList.remove('active', 'loading');
+  markdownSearchWrap.classList.remove('open');
+}
+
+function closeDocumentViewer() {
+  invalidateMarkdownRequest();
+  markdownViewer.classList.remove('active', 'loading', 'show-content');
+  localStorage.removeItem('rmviewer.pdfItemId');
+  localStorage.removeItem('rmviewer.pdfPage');
+  currentPdfLastModified = null;
+  document.body.style.overflow = '';
+  const el = document.getElementById('pdf-viewer');
+  el.classList.add('closing');
+  const finishClose = () => {
+    el.style.display = 'none';
+    el.classList.remove('closing');
+  };
+  el.addEventListener('transitionend', finishClose, { once: true });
+  setTimeout(finishClose, 350);
+}
+
+async function enterMarkdownMode(regenerate = false) {
+  if (!currentPdfItemId) return;
+
+  const requestItemId = currentPdfItemId;
+  const previousMarkdown = markdownItemId === requestItemId ? markdownText : '';
+  stopMarkdownRequest();
+  const controller = new AbortController();
+  markdownAbortController = controller;
+  const isCurrentRequest = () => (
+    controller === markdownAbortController && requestItemId === currentPdfItemId
+  );
+  markdownViewer.classList.add('active', 'loading');
+  markdownStatusText.textContent = regenerate ? 'Regenerating Markdown…' : 'Creating Markdown…';
+
+  if (previousMarkdown) {
+    markdownViewer.classList.add('show-content');
+    renderMarkdown(previousMarkdown);
+  } else {
+    markdownViewer.classList.remove('show-content');
+  }
+
+  try {
+    const response = await fetch(`/api/tree/${requestItemId}/markdown`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ regenerate }),
+      signal: controller.signal,
+    });
+    if (!isCurrentRequest()) {
+      await response.body?.cancel();
+      return;
+    }
+    if (!response.ok) throw new Error((await response.text()) || `HTTP ${response.status}`);
+    if (!response.body) throw new Error('Streaming is unavailable in this browser');
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let generatedMarkdown = '';
+    let receivedText = false;
+
+    while (true) {
+      const { value, done } = await reader.read();
+      if (!isCurrentRequest()) {
+        await reader.cancel();
+        return;
+      }
+      const text = decoder.decode(value || new Uint8Array(), { stream: !done });
+      if (text) {
+        generatedMarkdown += text;
+        if (!receivedText) {
+          receivedText = true;
+          markdownViewer.classList.add('show-content');
+        }
+        scheduleMarkdownRender(generatedMarkdown);
+      }
+      if (done) break;
+    }
+
+    if (!isCurrentRequest()) return;
+    if (!receivedText) throw new Error('The transcription returned no Markdown');
+    if (markdownRenderFrame) {
+      cancelAnimationFrame(markdownRenderFrame);
+      markdownRenderFrame = null;
+    }
+    markdownText = generatedMarkdown;
+    markdownItemId = requestItemId;
+    renderMarkdown(markdownText);
+    markdownViewer.classList.remove('loading');
+  } catch (error) {
+    if (!isCurrentRequest()) return;
+    markdownViewer.classList.remove('loading');
+    if (previousMarkdown) {
+      markdownText = previousMarkdown;
+      markdownItemId = requestItemId;
+      markdownViewer.classList.add('show-content');
+      renderMarkdown(previousMarkdown);
+    } else {
+      markdownViewer.classList.remove('active', 'show-content');
+    }
+    if (error.name !== 'AbortError') {
+      console.error('Markdown generation failed:', error);
+    }
+  } finally {
+    if (controller === markdownAbortController) markdownAbortController = null;
+  }
+}
+
+document.getElementById('markdown-cancel').addEventListener('click', stopMarkdownRequest);
+document.getElementById('markdown-show-pdf').addEventListener('click', showPdfMode);
+document.getElementById('markdown-close').addEventListener('click', closeDocumentViewer);
+document.getElementById('markdown-regenerate').addEventListener('click', () => enterMarkdownMode(true));
+document.getElementById('markdown-smaller').addEventListener('click', () => {
+  markdownFontSize = Math.max(14, markdownFontSize - 1);
+  markdownViewer.style.setProperty('--markdown-font-size', `${markdownFontSize}px`);
+});
+document.getElementById('markdown-larger').addEventListener('click', () => {
+  markdownFontSize = Math.min(24, markdownFontSize + 1);
+  markdownViewer.style.setProperty('--markdown-font-size', `${markdownFontSize}px`);
+});
+document.getElementById('markdown-download').addEventListener('click', () => {
+  if (!markdownText) return;
+  const blobUrl = URL.createObjectURL(new Blob([markdownText], { type: 'text/markdown' }));
+  const link = document.createElement('a');
+  link.href = blobUrl;
+  link.download = `${currentPdfName.replace(/[\\/:*?"<>|]/g, '_')}.md`;
+  link.click();
+  URL.revokeObjectURL(blobUrl);
+});
+document.getElementById('markdown-search-button').addEventListener('click', () => {
+  markdownSearchWrap.classList.toggle('open');
+  if (markdownSearchWrap.classList.contains('open')) markdownSearchInput.focus();
+});
+markdownSearchInput.addEventListener('input', updateMarkdownSearch);
+markdownSearchInput.addEventListener('keydown', event => {
+  if (event.key === 'Enter') {
+    event.preventDefault();
+    showMarkdownSearchHit(markdownSearchIndex + (event.shiftKey ? -1 : 1));
+  } else if (event.key === 'Escape') {
+    markdownSearchWrap.classList.remove('open');
+  }
+});
+document.getElementById('markdown-search-previous').addEventListener('click', () => {
+  showMarkdownSearchHit(markdownSearchIndex - 1);
+});
+document.getElementById('markdown-search-next').addEventListener('click', () => {
+  showMarkdownSearchHit(markdownSearchIndex + 1);
+});
 
 // ---------------------------------------------------------------------------
 //   API HELPERS
@@ -454,13 +831,30 @@ function renderDocuments(documents) {
 // the start of the pdf.
 function openPdfViewer(url, pageNumber, searchQuery) {
   if (!docManager) return;
+  const itemIdMatch = url.match(/\/api\/tree\/([^/]+)\/pdf/);
+  const nextItemId = itemIdMatch ? itemIdMatch[1] : null;
+  if (nextItemId !== currentPdfItemId) {
+    invalidateMarkdownRequest();
+    markdownViewer.classList.remove('active', 'loading', 'show-content');
+    markdownText = '';
+    markdownItemId = null;
+    markdownContent.replaceChildren();
+    markdownSearchInput.value = '';
+    clearMarkdownSearch();
+  }
+  currentPdfItemId = nextItemId;
+  currentPdfName = 'document';
+  if (currentPdfItemId) {
+    fetchItem(currentPdfItemId).then(item => {
+      if (item && item.id === currentPdfItemId) currentPdfName = item.name || 'document';
+    });
+  }
   const prevDocId = currentDocId;
   const docId = 'viewer-doc-' + (++viewerDocCounter);
   currentDocId = docId;
   docManager.openDocumentUrl({ url, documentId: docId, autoActivate: true });
 
   // Persist PDF state for reload recovery
-  const itemIdMatch = url.match(/\/api\/tree\/([^/]+)\/pdf/);
   if (itemIdMatch) {
     localStorage.setItem('rmviewer.pdfItemId', itemIdMatch[1]);
     localStorage.setItem('rmviewer.pdfPage', pageNumber || 1);
@@ -1013,6 +1407,11 @@ setInterval(async () => {
       if (head.ok) {
         const newLastMod = head.headers.get('Last-Modified');
         if (newLastMod !== currentPdfLastModified) {
+          invalidateMarkdownRequest();
+          markdownViewer.classList.remove('active', 'loading', 'show-content');
+          markdownText = '';
+          markdownItemId = null;
+          markdownContent.replaceChildren();
           await viewerReady;
           const savedZoom = zoomPlugin?.getState()?.currentZoomLevel;
           const savedScroll = scrollPlugin?.getMetrics()?.scrollOffset;

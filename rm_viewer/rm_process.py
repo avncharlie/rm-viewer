@@ -748,10 +748,11 @@ def parse_item(
     # Get old rm_files for OCR caching (before we modify anything)
     old_rm_files = old_item.get('rm_files', []) if old_item else []
 
-    # Delete directories EXCEPT rm_output (needed for OCR cache) and thumbnails (for thumbnail cache)
+    # Keep derived caches. Markdown validates itself against the final PDF hash,
+    # so it is safe to preserve until the replacement PDF has been produced.
     if nb_output_dir.exists():
         for child in nb_output_dir.iterdir():
-            if child.name not in ('rm_output', 'thumbnails'):
+            if child.name not in ('rm_output', 'thumbnails', 'markdown'):
                 if child.is_dir():
                     shutil.rmtree(child)
                 else:
@@ -965,7 +966,7 @@ def run_rm_process(xochitl_dir: Path, output_dir: Path, *, no_ocr=False, ocr_deb
             summary['deleted'].append(old_item.get('name', id))
             # Delete output directory if it's a book
             if old_item.get('type') == 'book':
-                old_dir = output_dir / f"{old_item['name']} - {id}"
+                old_dir = output_dir / f"{sanitize_filename(old_item['name'])} - {id}"
                 if old_dir.exists():
                     log.info(f"Deleting removed item: {old_item['name']}")
                     shutil.rmtree(old_dir)

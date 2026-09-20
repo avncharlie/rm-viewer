@@ -7,6 +7,8 @@
   <title>my reMarkable</title>
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
   <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+  <link rel="stylesheet" href="/vendor/katex/katex.min.css" />
+  <link rel="stylesheet" href="/vendor/markdown-it-texmath.css" />
   <link rel="stylesheet" href="/styles.css" />
 </head>
 <body>
@@ -205,8 +207,72 @@
     <div id='document_grid' class="rm_grid"></div>
 
     <div id="pdf-viewer"></div>
+    <section id="markdown-viewer" aria-label="Markdown document">
+      <header class="markdown-toolbar">
+        <div class="markdown-toolbar-group">
+          <button id="markdown-download" class="markdown-tool" type="button" title="Download Markdown" aria-label="Download Markdown">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M0 0h24v24H0z" stroke="none"/>
+              <path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/>
+              <path d="M7 11l5 5 5-5M12 4v12"/>
+            </svg>
+            <span class="markdown-extension">md</span>
+          </button>
+          <span class="markdown-divider"></span>
+          <button id="markdown-smaller" class="markdown-tool markdown-text-tool" type="button" title="Decrease text size" aria-label="Decrease text size">A−</button>
+          <button id="markdown-larger" class="markdown-tool markdown-text-tool" type="button" title="Increase text size" aria-label="Increase text size">A+</button>
+          <span class="markdown-divider"></span>
+          <button id="markdown-regenerate" class="markdown-tool" type="button" title="Regenerate Markdown" aria-label="Regenerate Markdown">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M0 0h24v24H0z" stroke="none"/>
+              <path d="M20 11a8.1 8.1 0 0 0 -15.5 -2m-.5 -4v4h4"/>
+              <path d="M4 13a8.1 8.1 0 0 0 15.5 2m.5 4v-4h-4"/>
+            </svg>
+          </button>
+        </div>
+        <div id="markdown-status" role="status">
+          <span>Creating Markdown…</span>
+          <button id="markdown-cancel" type="button">Cancel</button>
+        </div>
+        <div class="markdown-toolbar-group markdown-toolbar-right">
+          <button id="markdown-show-pdf" class="markdown-tool active" type="button" title="Show PDF" aria-label="Show PDF" aria-pressed="true">
+            <svg viewBox="2 4 20 16" aria-hidden="true">
+              <path d="M0 0h24v24H0z" stroke="none"/>
+              <path d="M3 5m0 2a2 2 0 0 1 2 -2h14a2 2 0 0 1 2 2v10a2 2 0 0 1 -2 2h-14a2 2 0 0 1 -2 -2z" stroke-width="1.6"/>
+              <path d="M7 15v-6l2 2l2 -2v6" stroke-width="1.6"/>
+              <path d="M14 13l2 2l2 -2m-2 2v-6" stroke-width="1.6"/>
+            </svg>
+          </button>
+          <div class="markdown-search-wrap">
+            <button id="markdown-search-button" class="markdown-tool" type="button" title="Search Markdown" aria-label="Search Markdown">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M0 0h24v24H0z" stroke="none"/>
+                <path d="M10 10m-7 0a7 7 0 1 0 14 0a7 7 0 1 0 -14 0M21 21l-6 -6"/>
+              </svg>
+            </button>
+            <div id="markdown-search-panel">
+              <input id="markdown-search-input" type="search" placeholder="Search" aria-label="Search Markdown" />
+              <span id="markdown-search-count"></span>
+              <button id="markdown-search-previous" type="button" aria-label="Previous result">↑</button>
+              <button id="markdown-search-next" type="button" aria-label="Next result">↓</button>
+            </div>
+          </div>
+          <button id="markdown-close" class="markdown-tool" type="button" title="Close" aria-label="Close">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6l-12 12M6 6l12 12"/></svg>
+          </button>
+        </div>
+        <div class="markdown-progress" aria-hidden="true"></div>
+      </header>
+      <div id="markdown-scroll">
+        <article id="markdown-content"></article>
+      </div>
+    </section>
   </main>
+  <script src="/vendor/markdown-it.min.js"></script>
+  <script src="/vendor/katex/katex.min.js"></script>
+  <script src="/vendor/markdown-it-texmath.min.js"></script>
+  <script src="/vendor/markdown-it-task-lists.min.js"></script>
+  <script src="/vendor/mermaid.min.js"></script>
   <script type="module" src="/app.js"></script>
-  <img  
 </body>
 </html>

@@ -1,18 +1,28 @@
-import logging
 import argparse
+import fcntl
+import hashlib
+import json
+import logging
+import os
+import tempfile
 import threading
+from itertools import chain
 
 from pathlib import Path
 
 import zipfile
 from io import BytesIO
 
-from flask import Flask, send_from_directory, send_file, request, jsonify
+from flask import (
+    Flask, Response, jsonify, request, send_file, send_from_directory,
+    stream_with_context,
+)
 
 log = logging.getLogger(__name__)
 from .utils import validate_path
 from .rm_index import RemarkableIndex, get_metadata_version
 from .rm_items import RemarkableDocument, RemarkableFolder
+from .markdown import GENERATOR_SIGNATURE, load_api_key, stream_pdf_markdown
 
 STATIC_DIR = Path(__file__).with_name("web")
 
@@ -30,6 +40,8 @@ def build_view_parser(parser: argparse._SubParsersAction):
     view_parser.add_argument("--port", type=int, default=5000)
     view_parser.add_argument("--workers", type=int, default=1,
                              help="Number of gunicorn worker processes (default: 1)")
+    view_parser.add_argument("--threads", type=int, default=2,
+                             help="Threads per gunicorn worker (default: 2)")
     view_parser.add_argument("--debug", action="store_true")
 
 def create_app(output_dir: Path) -> Flask:
@@ -100,6 +112,217 @@ def create_app(output_dir: Path) -> Flask:
         return send_from_directory(
             str(item.export_pdf.parent), item.export_pdf.name
         )
+
+    @app.post("/api/tree/<item_id>/markdown")
+    def api_markdown(item_id):
+        item = index.get(item_id)
+        if (
+            not isinstance(item, RemarkableDocument)
+            or not item.export_pdf
+            or not item.export_pdf.is_file()
+        ):
+            return 'Not found', 404
+
+        options = request.get_json(silent=True) or {}
+        regenerate = bool(options.get('regenerate'))
+        pdf_path = item.export_pdf
+        cache_dir = pdf_path.parent / 'markdown'
+        cache_path = cache_dir / f'{pdf_path.stem}.md'
+        metadata_path = cache_path.with_suffix('.md.meta.json')
+        lock_path = cache_dir / f'.{pdf_path.stem}.lock'
+        cache_dir.mkdir(parents=True, exist_ok=True)
+
+        def pdf_digest(path: Path) -> str:
+            digest = hashlib.sha256()
+            with path.open('rb') as source:
+                for block in iter(lambda: source.read(1024 * 1024), b''):
+                    digest.update(block)
+            return digest.hexdigest()
+
+        def cache_is_current() -> bool:
+            if not cache_path.is_file() or not metadata_path.is_file():
+                return False
+            try:
+                metadata = json.loads(metadata_path.read_text(encoding='utf-8'))
+                stat = pdf_path.stat()
+            except (OSError, ValueError, TypeError):
+                return False
+            if metadata.get('generator_signature') != GENERATOR_SIGNATURE:
+                return False
+            if (
+                metadata.get('pdf_size') == stat.st_size
+                and metadata.get('pdf_mtime_ns') == stat.st_mtime_ns
+            ):
+                return True
+            if metadata.get('pdf_sha256') != pdf_digest(pdf_path):
+                return False
+
+            # The bytes are unchanged; refresh the stat shortcut so later hits
+            # do not need to hash the PDF again.
+            metadata['pdf_size'] = stat.st_size
+            metadata['pdf_mtime_ns'] = stat.st_mtime_ns
+            metadata_fd, metadata_temp_name = tempfile.mkstemp(
+                dir=cache_dir, prefix=f'.{metadata_path.name}.', suffix='.tmp'
+            )
+            metadata_temp_path = Path(metadata_temp_name)
+            try:
+                with os.fdopen(metadata_fd, 'w', encoding='utf-8') as metadata_file:
+                    json.dump(metadata, metadata_file, indent=2)
+                    metadata_file.flush()
+                    os.fsync(metadata_file.fileno())
+                os.replace(metadata_temp_path, metadata_path)
+            finally:
+                metadata_temp_path.unlink(missing_ok=True)
+            return True
+
+        lock_file = lock_path.open('a+')
+        try:
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            lock_file.close()
+            response = Response(
+                'Markdown generation is already in progress',
+                status=409,
+                mimetype='text/plain',
+            )
+            response.headers['Retry-After'] = '2'
+            return response
+
+        if not regenerate and cache_is_current():
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+            lock_file.close()
+            response = send_file(cache_path, mimetype='text/markdown')
+            response.headers['X-Markdown-Cache'] = 'HIT'
+            response.headers['Cache-Control'] = 'no-store'
+            return response
+
+        generation_lock_file = (output_dir / '.markdown-generation.lock').open('a+')
+        try:
+            fcntl.flock(
+                generation_lock_file.fileno(),
+                fcntl.LOCK_EX | fcntl.LOCK_NB,
+            )
+        except BlockingIOError:
+            generation_lock_file.close()
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+            lock_file.close()
+            response = Response(
+                'Another Markdown generation is already in progress',
+                status=409,
+                mimetype='text/plain',
+            )
+            response.headers['Retry-After'] = '2'
+            return response
+
+        try:
+            api_key = load_api_key()
+            while True:
+                stat_before = pdf_path.stat()
+                pdf_bytes = pdf_path.read_bytes()
+                stat_after = pdf_path.stat()
+                before = (stat_before.st_size, stat_before.st_mtime_ns)
+                after = (stat_after.st_size, stat_after.st_mtime_ns)
+                if before == after:
+                    break
+            source_sha256 = hashlib.sha256(pdf_bytes).hexdigest()
+            markdown_stream = iter(stream_pdf_markdown(pdf_bytes, api_key))
+            first_chunk = next(markdown_stream)
+        except FileNotFoundError:
+            fcntl.flock(generation_lock_file.fileno(), fcntl.LOCK_UN)
+            generation_lock_file.close()
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+            lock_file.close()
+            return 'Gemini API key file not found', 503
+        except Exception as error:
+            fcntl.flock(generation_lock_file.fileno(), fcntl.LOCK_UN)
+            generation_lock_file.close()
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+            lock_file.close()
+            status = 429 if getattr(error, 'code', None) == 429 else 502
+            log.warning('Markdown generation failed before streaming: %s', error)
+            return str(error), status
+
+        markdown_fd, markdown_temp_name = tempfile.mkstemp(
+            dir=cache_dir, prefix=f'.{cache_path.name}.', suffix='.tmp'
+        )
+        markdown_temp_path = Path(markdown_temp_name)
+        metadata_temp_path = None
+
+        @stream_with_context
+        def generate():
+            nonlocal metadata_temp_path
+            markdown_file = os.fdopen(markdown_fd, 'w', encoding='utf-8')
+            try:
+                for text in chain((first_chunk,), markdown_stream):
+                    markdown_file.write(text)
+                    yield text
+
+                markdown_file.flush()
+                os.fsync(markdown_file.fileno())
+                markdown_file.close()
+
+                publication_stat_before = pdf_path.stat()
+                publication_sha256 = pdf_digest(pdf_path)
+                publication_stat_after = pdf_path.stat()
+                publication_before = (
+                    publication_stat_before.st_size,
+                    publication_stat_before.st_mtime_ns,
+                )
+                publication_after = (
+                    publication_stat_after.st_size,
+                    publication_stat_after.st_mtime_ns,
+                )
+                if (
+                    publication_before != publication_after
+                    or publication_sha256 != source_sha256
+                ):
+                    raise RuntimeError('PDF changed during Markdown generation')
+
+                metadata = {
+                    'pdf_sha256': source_sha256,
+                    'pdf_size': publication_stat_after.st_size,
+                    'pdf_mtime_ns': publication_stat_after.st_mtime_ns,
+                    'generator_signature': GENERATOR_SIGNATURE,
+                }
+                metadata_fd, metadata_temp_name = tempfile.mkstemp(
+                    dir=cache_dir, prefix=f'.{metadata_path.name}.', suffix='.tmp'
+                )
+                metadata_temp_path = Path(metadata_temp_name)
+                with os.fdopen(metadata_fd, 'w', encoding='utf-8') as metadata_file:
+                    json.dump(metadata, metadata_file, indent=2)
+                    metadata_file.flush()
+                    os.fsync(metadata_file.fileno())
+
+                final_stat = pdf_path.stat()
+                if (
+                    final_stat.st_size,
+                    final_stat.st_mtime_ns,
+                ) != publication_after:
+                    raise RuntimeError('PDF changed during Markdown generation')
+
+                os.replace(markdown_temp_path, cache_path)
+                os.replace(metadata_temp_path, metadata_path)
+            except GeneratorExit:
+                close_stream = getattr(markdown_stream, 'close', None)
+                if close_stream:
+                    close_stream()
+                raise
+            finally:
+                if not markdown_file.closed:
+                    markdown_file.close()
+                markdown_temp_path.unlink(missing_ok=True)
+                if metadata_temp_path:
+                    metadata_temp_path.unlink(missing_ok=True)
+                fcntl.flock(generation_lock_file.fileno(), fcntl.LOCK_UN)
+                generation_lock_file.close()
+                fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+                lock_file.close()
+
+        response = Response(generate(), mimetype='text/markdown')
+        response.headers['X-Markdown-Cache'] = 'MISS'
+        response.headers['Cache-Control'] = 'no-store'
+        response.headers['X-Accel-Buffering'] = 'no'
+        return response
 
     @app.get("/api/tree/<item_id>/thumbnail/<int:page_index>")
     def api_thumbnail(item_id, page_index):
@@ -200,5 +423,10 @@ def rm_view(args: argparse.Namespace):
             def load(self):
                 return self.application
 
-        options = {'bind': f'{args.host}:{args.port}', 'workers': args.workers, 'accesslog': '-'}
+        options = {
+            'bind': f'{args.host}:{args.port}',
+            'workers': args.workers,
+            'threads': args.threads,
+            'accesslog': '-',
+        }
         GunicornApp(app, options).run()
