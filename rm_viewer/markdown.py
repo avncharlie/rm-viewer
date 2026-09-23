@@ -77,7 +77,10 @@ Structure
 - Preserve list nesting from indentation. Dashes, dots, arrows-as-bullets and
   similar marks become `-` items. Numbered items stay numbered. Hand-drawn
   checkboxes become task list items, ticked or not as drawn.
-- A hooked right arrow used as indentation should be expressed as `$\hookrightarrow$`
+- A hooked right arrow used as indentation should be expressed as
+  `$\hookrightarrow$`
+    - If there is subordinate text before an indented line, preserve that
+      layout with a hard break before the `$\hookrightarrow$` line.
 - Underlined, boxed, circled, starred or highlighted words are emphasis. Use
   `**strong**` for those. Use `*emphasis*` only for clearly lighter emphasis.
   Apply it to the words marked, not the whole line.
