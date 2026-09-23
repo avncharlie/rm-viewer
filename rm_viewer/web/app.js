@@ -246,9 +246,14 @@ const markdownStatusText = document.querySelector('#markdown-status span');
 const markdownSearchWrap = document.querySelector('.markdown-search-wrap');
 const markdownSearchInput = document.getElementById('markdown-search-input');
 const markdownSearchCount = document.getElementById('markdown-search-count');
+const markdownEditor = document.getElementById('markdown-editor');
+const markdownEditButton = document.getElementById('markdown-edit');
+const markdownRegenerateButton = document.getElementById('markdown-regenerate');
+const markdownSearchButton = document.getElementById('markdown-search-button');
 let markdownAbortController = null;
 let markdownText = '';
 let markdownItemId = null;
+let markdownEditOriginal = '';
 let markdownFontSize = 18;
 let markdownRenderFrame = null;
 let markdownRenderVersion = 0;
@@ -512,15 +517,124 @@ function waitForMarkdownRetry(milliseconds, signal) {
   });
 }
 
+function isMarkdownEditing() {
+  return markdownViewer.classList.contains('editing');
+}
+
+function hasUnsavedMarkdownEdit() {
+  return isMarkdownEditing() && markdownEditor.value !== markdownEditOriginal;
+}
+
+function leaveMarkdownEditMode() {
+  markdownViewer.classList.remove('editing', 'saving');
+  markdownEditButton.classList.remove('active');
+  markdownEditButton.setAttribute('aria-pressed', 'false');
+  markdownEditButton.title = 'Edit Markdown';
+  markdownEditButton.setAttribute('aria-label', 'Edit Markdown');
+  markdownEditButton.disabled = !markdownText || markdownViewer.classList.contains('loading');
+  markdownRegenerateButton.disabled = false;
+  markdownSearchButton.disabled = false;
+  markdownEditOriginal = '';
+  markdownEditor.value = '';
+}
+
+function confirmDiscardMarkdownEdit() {
+  if (!isMarkdownEditing()) return true;
+  if (markdownViewer.classList.contains('saving')) return false;
+  if (
+    hasUnsavedMarkdownEdit()
+    && !window.confirm('Discard your unsaved Markdown changes?')
+  ) {
+    return false;
+  }
+  leaveMarkdownEditMode();
+  return true;
+}
+
+function enterMarkdownEditMode() {
+  if (!markdownText || markdownViewer.classList.contains('loading')) return;
+  markdownEditOriginal = markdownText;
+  markdownEditor.value = markdownText;
+  markdownViewer.classList.add('editing');
+  markdownEditButton.classList.add('active');
+  markdownEditButton.setAttribute('aria-pressed', 'true');
+  markdownEditButton.title = 'Save and preview';
+  markdownEditButton.setAttribute('aria-label', 'Save Markdown and preview');
+  markdownRegenerateButton.disabled = true;
+  markdownSearchButton.disabled = true;
+  markdownSearchWrap.classList.remove('open');
+  markdownEditor.focus({ preventScroll: true });
+}
+
+async function saveMarkdownEdit() {
+  if (!isMarkdownEditing() || markdownViewer.classList.contains('saving')) return;
+  const editedMarkdown = markdownEditor.value;
+  if (editedMarkdown === markdownEditOriginal) {
+    leaveMarkdownEditMode();
+    return;
+  }
+
+  const requestItemId = currentPdfItemId;
+  markdownViewer.classList.add('saving');
+  markdownStatusText.textContent = 'Saving Markdown…';
+  markdownEditButton.disabled = true;
+  reportMarkdownDebug('edit_save_started', {
+    request_item_id: requestItemId,
+    original_chars: markdownEditOriginal.length,
+    edited_chars: editedMarkdown.length,
+  });
+
+  try {
+    const response = await fetch(`/api/tree/${requestItemId}/markdown`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        markdown: editedMarkdown,
+        original: markdownEditOriginal,
+      }),
+    });
+    if (!response.ok) {
+      throw new Error((await response.text()) || `HTTP ${response.status}`);
+    }
+    if (requestItemId !== currentPdfItemId || !isMarkdownEditing()) return;
+
+    markdownText = editedMarkdown;
+    markdownItemId = requestItemId;
+    renderMarkdown(markdownText);
+    reportMarkdownDebug('edit_save_completed', {
+      request_item_id: requestItemId,
+      chars: markdownText.length,
+    });
+    leaveMarkdownEditMode();
+  } catch (error) {
+    reportMarkdownDebug('edit_save_failed', {
+      request_item_id: requestItemId,
+      message: error.message || String(error),
+      stack: error.stack,
+    });
+    window.alert(`Could not save Markdown: ${error.message || error}`);
+  } finally {
+    markdownViewer.classList.remove('saving');
+    if (isMarkdownEditing()) markdownEditButton.disabled = false;
+  }
+}
+
+async function toggleMarkdownEditMode() {
+  if (isMarkdownEditing()) await saveMarkdownEdit();
+  else enterMarkdownEditMode();
+}
+
 function showPdfMode() {
+  if (!confirmDiscardMarkdownEdit()) return;
   invalidateMarkdownRequest();
   markdownViewer.classList.remove('active', 'loading');
   markdownSearchWrap.classList.remove('open');
 }
 
 function closeDocumentViewer() {
+  if (!confirmDiscardMarkdownEdit()) return;
   invalidateMarkdownRequest();
-  markdownViewer.classList.remove('active', 'loading', 'show-content');
+  markdownViewer.classList.remove('active', 'loading', 'saving', 'show-content');
   localStorage.removeItem('rmviewer.pdfItemId');
   localStorage.removeItem('rmviewer.pdfPage');
   currentPdfLastModified = null;
@@ -537,6 +651,7 @@ function closeDocumentViewer() {
 
 async function enterMarkdownMode(regenerate = false) {
   if (!currentPdfItemId) return;
+  if (!confirmDiscardMarkdownEdit()) return;
 
   const requestItemId = currentPdfItemId;
   const previousMarkdown = markdownItemId === requestItemId ? markdownText : '';
@@ -548,6 +663,7 @@ async function enterMarkdownMode(regenerate = false) {
     controller === markdownAbortController && requestItemId === currentPdfItemId
   );
   markdownViewer.classList.add('active', 'loading');
+  markdownEditButton.disabled = true;
   markdownStatusText.textContent = regenerate ? 'Regenerating Markdown…' : 'Creating Markdown…';
   reportMarkdownDebug('request_started', {
     request_item_id: requestItemId,
@@ -644,6 +760,7 @@ async function enterMarkdownMode(regenerate = false) {
     markdownItemId = requestItemId;
     renderMarkdown(markdownText);
     markdownViewer.classList.remove('loading');
+    markdownEditButton.disabled = false;
     reportMarkdownDebug('request_completed', {
       chunks: responseChunks,
       chars: markdownText.length,
@@ -664,8 +781,10 @@ async function enterMarkdownMode(regenerate = false) {
       markdownItemId = requestItemId;
       markdownViewer.classList.add('show-content');
       renderMarkdown(previousMarkdown);
+      markdownEditButton.disabled = false;
     } else {
       markdownViewer.classList.remove('active', 'show-content');
+      markdownEditButton.disabled = true;
     }
     if (error.name !== 'AbortError') {
       console.error('Markdown generation failed:', error);
@@ -685,7 +804,8 @@ async function enterMarkdownMode(regenerate = false) {
 document.getElementById('markdown-cancel').addEventListener('click', stopMarkdownRequest);
 document.getElementById('markdown-show-pdf').addEventListener('click', showPdfMode);
 document.getElementById('markdown-close').addEventListener('click', closeDocumentViewer);
-document.getElementById('markdown-regenerate').addEventListener('click', () => enterMarkdownMode(true));
+markdownRegenerateButton.addEventListener('click', () => enterMarkdownMode(true));
+markdownEditButton.addEventListener('click', toggleMarkdownEditMode);
 document.getElementById('markdown-smaller').addEventListener('click', () => {
   markdownFontSize = Math.max(14, markdownFontSize - 1);
   markdownViewer.style.setProperty('--markdown-font-size', `${markdownFontSize}px`);
@@ -695,13 +815,25 @@ document.getElementById('markdown-larger').addEventListener('click', () => {
   markdownViewer.style.setProperty('--markdown-font-size', `${markdownFontSize}px`);
 });
 document.getElementById('markdown-download').addEventListener('click', () => {
-  if (!markdownText) return;
-  const blobUrl = URL.createObjectURL(new Blob([markdownText], { type: 'text/markdown' }));
+  const source = isMarkdownEditing() ? markdownEditor.value : markdownText;
+  if (!source) return;
+  const blobUrl = URL.createObjectURL(new Blob([source], { type: 'text/markdown' }));
   const link = document.createElement('a');
   link.href = blobUrl;
   link.download = `${currentPdfName.replace(/[\\/:*?"<>|]/g, '_')}.md`;
   link.click();
   URL.revokeObjectURL(blobUrl);
+});
+markdownEditor.addEventListener('keydown', event => {
+  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {
+    event.preventDefault();
+    saveMarkdownEdit();
+  }
+});
+window.addEventListener('beforeunload', event => {
+  if (!hasUnsavedMarkdownEdit()) return;
+  event.preventDefault();
+  event.returnValue = '';
 });
 document.getElementById('markdown-search-button').addEventListener('click', () => {
   markdownSearchWrap.classList.toggle('open');
@@ -985,10 +1117,12 @@ function openPdfViewer(url, pageNumber, searchQuery) {
   const itemIdMatch = url.match(/\/api\/tree\/([^/]+)\/pdf/);
   const nextItemId = itemIdMatch ? itemIdMatch[1] : null;
   if (nextItemId !== currentPdfItemId) {
+    if (!confirmDiscardMarkdownEdit()) return;
     invalidateMarkdownRequest();
-    markdownViewer.classList.remove('active', 'loading', 'show-content');
+    markdownViewer.classList.remove('active', 'loading', 'saving', 'show-content');
     markdownText = '';
     markdownItemId = null;
+    markdownEditButton.disabled = true;
     markdownContent.replaceChildren();
     markdownSearchInput.value = '';
     clearMarkdownSearch();
@@ -1559,10 +1693,20 @@ setInterval(async () => {
       if (head.ok) {
         const newLastMod = head.headers.get('Last-Modified');
         if (newLastMod !== currentPdfLastModified) {
+          if (hasUnsavedMarkdownEdit()) {
+            currentPdfLastModified = newLastMod;
+            window.alert(
+              'The source PDF changed while you were editing. Your text has '
+              + 'not been discarded, but it cannot be saved over the new PDF.'
+            );
+            return;
+          }
+          if (isMarkdownEditing()) leaveMarkdownEditMode();
           invalidateMarkdownRequest();
-          markdownViewer.classList.remove('active', 'loading', 'show-content');
+          markdownViewer.classList.remove('active', 'loading', 'saving', 'show-content');
           markdownText = '';
           markdownItemId = null;
+          markdownEditButton.disabled = true;
           markdownContent.replaceChildren();
           await viewerReady;
           const savedZoom = zoomPlugin?.getState()?.currentZoomLevel;

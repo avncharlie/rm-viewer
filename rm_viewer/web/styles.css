@@ -859,6 +859,11 @@ html, body {
   transition: color 150ms ease, background-color 150ms ease, box-shadow 150ms ease;
 }
 
+.markdown-tool:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
 .markdown-tool svg {
   flex: 0 0 auto;
   width: 20px;
@@ -912,6 +917,14 @@ html, body {
   display: flex;
 }
 
+#markdown-viewer.saving #markdown-status {
+  display: flex;
+}
+
+#markdown-viewer.saving #markdown-cancel {
+  display: none;
+}
+
 #markdown-status button {
   padding: 2px 5px;
   border-bottom: 1px solid currentColor;
@@ -930,6 +943,10 @@ html, body {
 }
 
 #markdown-viewer.loading .markdown-progress {
+  display: block;
+}
+
+#markdown-viewer.saving .markdown-progress {
   display: block;
 }
 
@@ -1016,6 +1033,10 @@ html, body {
   visibility: visible;
 }
 
+#markdown-viewer.editing #markdown-scroll {
+  overflow: hidden;
+}
+
 #markdown-content {
   min-height: calc(100vh - 124px);
   max-width: var(--markdown-viewer-width);
@@ -1025,6 +1046,30 @@ html, body {
   background: white;
   font: 400 var(--markdown-font-size)/1.62 "reMarkable Sans", sans-serif;
   overflow-wrap: break-word;
+}
+
+#markdown-editor {
+  display: none;
+  width: 100%;
+  height: 100%;
+  max-width: var(--markdown-viewer-width);
+  margin: 0 auto;
+  padding: 34px 40px 72px;
+  resize: none;
+  border: 1px solid var(--bgMoreDark);
+  outline: none;
+  color: var(--dark);
+  background: white;
+  font: 400 15px/1.55 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  tab-size: 2;
+}
+
+#markdown-viewer.editing #markdown-content {
+  display: none;
+}
+
+#markdown-viewer.editing #markdown-editor {
+  display: block;
 }
 
 #markdown-content > :first-child {
@@ -1164,10 +1209,18 @@ html, body {
     min-height: 100%;
     padding: 36px 22px 64px;
   }
+  #markdown-editor {
+    border: 0;
+    padding: 28px 20px 64px;
+  }
 }
 
 @media (max-width: 480px) {
   #markdown-viewer { --markdown-font-size: 17px; }
+}
+
+@media (max-width: 360px) {
+  .markdown-toolbar-group { gap: 6px; }
 }
 
 /* pdf viewer – phone override: 95vh so Safari page-selector doesn't clip */

@@ -229,6 +229,13 @@
               <path d="M4 13a8.1 8.1 0 0 0 15.5 2m.5 4v-4h-4"/>
             </svg>
           </button>
+          <button id="markdown-edit" class="markdown-tool" type="button" title="Edit Markdown" aria-label="Edit Markdown" aria-pressed="false" disabled>
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M0 0h24v24H0z" stroke="none"/>
+              <path d="M4 20h4l11 -11a2.8 2.8 0 0 0 -4 -4l-11 11v4"/>
+              <path d="M13.5 6.5l4 4M4 16l4 4"/>
+            </svg>
+          </button>
         </div>
         <div id="markdown-status" role="status">
           <span>Creating Markdown…</span>
@@ -265,6 +272,7 @@
       </header>
       <div id="markdown-scroll">
         <article id="markdown-content"></article>
+        <textarea id="markdown-editor" aria-label="Edit raw Markdown" spellcheck="false"></textarea>
       </div>
     </section>
   </main>

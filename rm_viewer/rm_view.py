@@ -27,6 +27,7 @@ from .rm_items import RemarkableDocument, RemarkableFolder
 from .markdown import GENERATOR_SIGNATURE, load_api_key, stream_pdf_markdown
 
 STATIC_DIR = Path(__file__).with_name("web")
+MAX_MARKDOWN_EDIT_BYTES = 5 * 1024 * 1024
 
 def build_view_parser(parser: argparse._SubParsersAction):
     view_parser = parser.add_parser(
@@ -216,7 +217,10 @@ def create_app(output_dir: Path, debug: bool = False) -> Flask:
             except (OSError, ValueError, TypeError) as error:
                 debug_log('cache_metadata_invalid', error=repr(error))
                 return False
-            if metadata.get('generator_signature') != GENERATOR_SIGNATURE:
+            if (
+                not metadata.get('manually_edited')
+                and metadata.get('generator_signature') != GENERATOR_SIGNATURE
+            ):
                 debug_log(
                     'cache_generator_mismatch',
                     cached_signature=str(metadata.get('generator_signature'))[:12],
@@ -591,6 +595,130 @@ def create_app(output_dir: Path, debug: bool = False) -> Flask:
         response.headers['X-Markdown-Request-ID'] = request_id
         debug_log('response_created', status=200, cache='MISS')
         return response
+
+    @app.put("/api/tree/<item_id>/markdown")
+    def api_save_markdown(item_id):
+        request_id = uuid.uuid4().hex[:12]
+        item = index.get(item_id)
+        if (
+            not isinstance(item, RemarkableDocument)
+            or not item.export_pdf
+            or not item.export_pdf.is_file()
+        ):
+            return 'Not found', 404
+
+        if (
+            request.content_length
+            and request.content_length > MAX_MARKDOWN_EDIT_BYTES * 2 + 4096
+        ):
+            return 'Markdown edit is too large', 413
+        payload = request.get_json(silent=True)
+        if not isinstance(payload, dict):
+            return 'Invalid Markdown edit', 400
+        markdown = payload.get('markdown')
+        original = payload.get('original')
+        if not isinstance(markdown, str) or not isinstance(original, str):
+            return 'Markdown and original must be strings', 400
+        if (
+            len(markdown.encode('utf-8')) > MAX_MARKDOWN_EDIT_BYTES
+            or len(original.encode('utf-8')) > MAX_MARKDOWN_EDIT_BYTES
+        ):
+            return 'Markdown edit is too large', 413
+
+        pdf_path = item.export_pdf
+        cache_dir = pdf_path.parent / 'markdown'
+        cache_path = cache_dir / f'{pdf_path.stem}.md'
+        metadata_path = cache_path.with_suffix('.md.meta.json')
+        lock_path = cache_dir / f'.{pdf_path.stem}.lock'
+        if not cache_path.is_file() or not metadata_path.is_file():
+            return 'Markdown cache not found', 404
+
+        lock_file = lock_path.open('a+')
+        try:
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            lock_file.close()
+            response = Response(
+                'Markdown generation or editing is already in progress',
+                status=409,
+                mimetype='text/plain',
+            )
+            response.headers['Retry-After'] = '2'
+            return response
+
+        markdown_temp_path = None
+        metadata_temp_path = None
+        try:
+            try:
+                current = cache_path.read_text(encoding='utf-8')
+                metadata = json.loads(metadata_path.read_text(encoding='utf-8'))
+            except (OSError, ValueError, TypeError):
+                return 'Markdown cache is invalid', 409
+            if current != original:
+                return 'Markdown changed since editing began', 409
+
+            stat_before = pdf_path.stat()
+            pdf_sha256 = hashlib.sha256(pdf_path.read_bytes()).hexdigest()
+            stat_after = pdf_path.stat()
+            pdf_stat = (stat_after.st_size, stat_after.st_mtime_ns)
+            if (
+                (stat_before.st_size, stat_before.st_mtime_ns) != pdf_stat
+                or metadata.get('pdf_sha256') != pdf_sha256
+            ):
+                return 'PDF changed since Markdown was generated', 409
+
+            metadata['pdf_size'] = stat_after.st_size
+            metadata['pdf_mtime_ns'] = stat_after.st_mtime_ns
+            metadata['manually_edited'] = True
+            metadata['manual_edit_saved_at_ns'] = time.time_ns()
+
+            markdown_fd, markdown_temp_name = tempfile.mkstemp(
+                dir=cache_dir, prefix=f'.{cache_path.name}.', suffix='.tmp'
+            )
+            markdown_temp_path = Path(markdown_temp_name)
+            with os.fdopen(markdown_fd, 'w', encoding='utf-8') as markdown_file:
+                markdown_file.write(markdown)
+                markdown_file.flush()
+                os.fsync(markdown_file.fileno())
+
+            metadata_fd, metadata_temp_name = tempfile.mkstemp(
+                dir=cache_dir, prefix=f'.{metadata_path.name}.', suffix='.tmp'
+            )
+            metadata_temp_path = Path(metadata_temp_name)
+            with os.fdopen(metadata_fd, 'w', encoding='utf-8') as metadata_file:
+                json.dump(metadata, metadata_file, indent=2)
+                metadata_file.flush()
+                os.fsync(metadata_file.fileno())
+
+            final_stat = pdf_path.stat()
+            if (final_stat.st_size, final_stat.st_mtime_ns) != pdf_stat:
+                return 'PDF changed while Markdown was being saved', 409
+
+            os.replace(markdown_temp_path, cache_path)
+            markdown_temp_path = None
+            os.replace(metadata_temp_path, metadata_path)
+            metadata_temp_path = None
+            if app.config['VIEWER_DEBUG_LOGGING']:
+                log.debug(
+                    'markdown-save request=%s item_id=%s chars=%d cache_path=%s',
+                    request_id,
+                    item_id,
+                    len(markdown),
+                    cache_path,
+                )
+            return jsonify({
+                'status': 'saved',
+                'characters': len(markdown),
+                'request_id': request_id,
+            })
+        finally:
+            if markdown_temp_path:
+                markdown_temp_path.unlink(missing_ok=True)
+            if metadata_temp_path:
+                metadata_temp_path.unlink(missing_ok=True)
+            if not lock_file.closed:
+                fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+                lock_file.close()
 
     @app.get("/api/tree/<item_id>/thumbnail/<int:page_index>")
     def api_thumbnail(item_id, page_index):
