@@ -133,6 +133,9 @@ Diagrams and sketches
 - Otherwise, put a brief italic description in the drawing's position, e.g.
   `*Sketch: heap chunks with an arrow from the freed chunk to the tcache
   bin.*` Include any labels you can read. Do not guess details.
+- Before returning the document, inspect every Mermaid fence. Any LaTeX command
+  such as `\phi` or `\text` outside `$$...$$` is invalid and must be enclosed
+  in `$$...$$`.
 
 Uncertainty
 - If you can read a word with reasonable confidence from its shape and
