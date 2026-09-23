@@ -46,6 +46,8 @@ Line breaks
 - Separate every block from the next with one blank line: paragraphs, headings,
   lists, block quotes, tables, code fences and Mermaid blocks. A list or table
   that directly follows a paragraph line will not render correctly.
+  - Paragraphs that sit to the right of a vertical line are typically block
+    quotes
 - When the author's own line break is meaningful but the lines are one block
   (verse, an address, a short stacked list of terms, a signature line, a
   definition and its gloss), end the line with a single backslash `\` to force
