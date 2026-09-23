@@ -92,6 +92,9 @@ Structure
    layout with a hard break before the `$\hookrightarrow$` line.
      - Put the hard-break `\` at the end of the preceding line; a newline by
        itself is not enough.
+       Example:
+"some text here"\
+$\hookrightarrow$ indented arrow text here
  - A right arrow used inline to show ordinary direction, sequence, mapping, data
    flow, or “leads to” becomes `$\rightarrow$`.
  - Preserve the arrow's placement. Do not move a structural arrow onto another
