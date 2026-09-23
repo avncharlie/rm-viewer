@@ -77,15 +77,23 @@ Structure
 - Preserve list nesting from indentation. Dashes, dots, arrows-as-bullets and
   similar marks become `-` items. Numbered items stay numbered. Hand-drawn
   checkboxes become task list items, ticked or not as drawn.
-- A hooked right arrow used as indentation should be expressed as
-  `$\hookrightarrow$`
-    - If there is subordinate text before an indented line, preserve that
-      layout with a hard break (a single backslash '\' to end that line) before
-      the `$\hookrightarrow$` line.
 - Underlined, boxed, circled, starred or highlighted words are emphasis. Use
   `**strong**` for those. Use `*emphasis*` only for clearly lighter emphasis.
   Apply it to the words marked, not the whole line.
 - Hand-drawn grids and aligned columns become pipe tables.
+
+ Arrow conventions
+ - Determine whether a handwritten right arrow expresses an inline relationship
+   or introduces a subordinate explanation.
+ - A right arrow used like indentation, introducing a consequence, explanation,
+   expansion, result, or child of the preceding text, becomes
+   `$\hookrightarrow$`. Preserve it rather than converting it into a bullet.
+ - If the subordinate text is written on the next indented line, preserve that
+   layout with a hard break before the `$\hookrightarrow$` line.
+ - A right arrow used inline to show ordinary direction, sequence, mapping, data
+   flow, or “leads to” becomes `$\rightarrow$`.
+ - Preserve the arrow's placement. Do not move a structural arrow onto another
+   line when the author wrote it inline.
 
 Corrections and annotations
 - Place margin notes and arrowed asides immediately after the text they refer
