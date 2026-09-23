@@ -85,11 +85,9 @@ Structure
 - Hand-drawn grids and aligned columns become pipe tables.
 
  Arrow conventions
- - Determine whether a handwritten right arrow expresses an inline relationship
-   or introduces a subordinate explanation.
  - A right arrow used like indentation, introducing a consequence, explanation,
    expansion, result, or child of the preceding text, becomes
-   `$\hookrightarrow$`. Preserve it rather than converting it into a bullet.
+   `$\hookrightarrow$`.
  - If the subordinate text is written on the next indented line, preserve that
    layout with a hard break before the `$\hookrightarrow$` line.
      - Put the hard-break `\` at the end of the preceding line; a newline by
