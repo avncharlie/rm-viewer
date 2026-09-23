@@ -126,6 +126,8 @@ Diagrams and sketches
   `A["SSA uses $$\phi$$ nodes"]`. The surrounding Markdown renderer does not
   process math inside Mermaid fences, so never write a bare command such as
   `\phi` in a Mermaid label.
+- In Mermaid, NEVER use single dollar signs (i.e `$<something>$`) to wrap a
+  math/LaTeX expression.. ALWAYS use double dollar signs (`$$...$$`)
 - Memory layouts, stack frames, packet or struct layouts are usually clearer
   as a table or a fenced text block than as Mermaid.
 - Otherwise, put a brief italic description in the drawing's position, e.g.
