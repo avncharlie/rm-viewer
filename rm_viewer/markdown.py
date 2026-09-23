@@ -80,7 +80,8 @@ Structure
 - A hooked right arrow used as indentation should be expressed as
   `$\hookrightarrow$`
     - If there is subordinate text before an indented line, preserve that
-      layout with a hard break before the `$\hookrightarrow$` line.
+      layout with a hard break (a single backslash '\' to end that line) before
+      the `$\hookrightarrow$` line.
 - Underlined, boxed, circled, starred or highlighted words are emphasis. Use
   `**strong**` for those. Use `*emphasis*` only for clearly lighter emphasis.
   Apply it to the words marked, not the whole line.
