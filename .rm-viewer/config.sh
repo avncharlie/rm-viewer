@@ -25,7 +25,13 @@ RSYNC_REMOTE="/opt/homebrew/bin/rsync"
 DEBOUNCE=30
 
 SSH_KEY="$INSTALL_DIR/rm-viewer-sync-key"
-SSH_OPTS="-i $SSH_KEY -o StrictHostKeyChecking=no"
+
+# Dropbear settings
+#  -K 15: keepalive every 15 seconds once connection established
+#  -I 120: timeout after no data recieved for 2 minutes
+# This is so a dropped connection (e.g. wifi going away mid-sync) can't hang
+# ssh forever
+SSH_OPTS="-i $SSH_KEY -o StrictHostKeyChecking=no -K 15 -I 120"
 
 XOCHITL="/home/root/.local/share/remarkable/xochitl"
 LOCKFILE="/tmp/rm-viewer-sync.lock"
